@@ -67,9 +67,18 @@ macro_rules! make_test_app {
 
         actix_web::App::new()
             .app_data(state)
-            .route("/health", web::get().to(rust_cc_proxy::server::handlers::health))
-            .route("/v1/models", web::get().to(rust_cc_proxy::server::handlers::models_handler))
-            .route("/v1/messages", web::post().to(rust_cc_proxy::server::handlers::messages_handler))
+            .route(
+                "/health",
+                web::get().to(rust_cc_proxy::server::handlers::health),
+            )
+            .route(
+                "/v1/models",
+                web::get().to(rust_cc_proxy::server::handlers::models_handler),
+            )
+            .route(
+                "/v1/messages",
+                web::post().to(rust_cc_proxy::server::handlers::messages_handler),
+            )
     }};
 }
 
@@ -108,8 +117,7 @@ async fn spawn_mock_upstream(
     expected_response: Value,
 ) -> (u16, Arc<AtomicUsize>, Arc<std::sync::Mutex<Option<Value>>>) {
     let request_count = Arc::new(AtomicUsize::new(0));
-    let last_body: Arc<std::sync::Mutex<Option<Value>>> =
-        Arc::new(std::sync::Mutex::new(None));
+    let last_body: Arc<std::sync::Mutex<Option<Value>>> = Arc::new(std::sync::Mutex::new(None));
 
     let req_count = request_count.clone();
     let last_req = last_body.clone();
@@ -220,8 +228,7 @@ async fn test_messages_returns_error_on_upstream_failure() {
         actix_web::App::new().route(
             "/v1/messages",
             web::post().to(|| async {
-                HttpResponse::InternalServerError()
-                    .json(serde_json::json!({"error": "boom"}))
+                HttpResponse::InternalServerError().json(serde_json::json!({"error": "boom"}))
             }),
         )
     })
@@ -288,9 +295,7 @@ async fn test_messages_with_deepseek_model_normalizes_request() {
 
 #[actix_web::test]
 async fn test_messages_invalid_json_returns_error() {
-    let app = test::init_service(
-        make_test_app!("http://127.0.0.1:19999".to_string()),
-    ).await;
+    let app = test::init_service(make_test_app!("http://127.0.0.1:19999".to_string())).await;
 
     let req = test::TestRequest::post()
         .uri("/v1/messages")

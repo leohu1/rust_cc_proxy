@@ -25,29 +25,46 @@ struct CcrStore {
 
 impl CcrStore {
     fn new() -> Self {
-        CcrStore { entries: Mutex::new(HashMap::new()), total_stored: Mutex::new(0), hits: Mutex::new(0), misses: Mutex::new(0) }
+        CcrStore {
+            entries: Mutex::new(HashMap::new()),
+            total_stored: Mutex::new(0),
+            hits: Mutex::new(0),
+            misses: Mutex::new(0),
+        }
     }
     fn store(&self, content: &str) -> String {
         let hash = blake3::hash(content.as_bytes()).to_hex()[..24].to_string();
-        self.entries.lock().unwrap().insert(hash.clone(), content.to_string());
+        self.entries
+            .lock()
+            .unwrap()
+            .insert(hash.clone(), content.to_string());
         *self.total_stored.lock().unwrap() += 1;
         hash
     }
     fn get(&self, hash: &str) -> Option<String> {
         let entries = self.entries.lock().unwrap();
         match entries.get(hash) {
-            Some(v) => { *self.hits.lock().unwrap() += 1; Some(v.clone()) }
-            None => { *self.misses.lock().unwrap() += 1; None }
+            Some(v) => {
+                *self.hits.lock().unwrap() += 1;
+                Some(v.clone())
+            }
+            None => {
+                *self.misses.lock().unwrap() += 1;
+                None
+            }
         }
     }
 }
 
-static CCR: std::sync::LazyLock<Mutex<CcrStore>> = std::sync::LazyLock::new(|| Mutex::new(CcrStore::new()));
+static CCR: std::sync::LazyLock<Mutex<CcrStore>> =
+    std::sync::LazyLock::new(|| Mutex::new(CcrStore::new()));
 
 // ── Helper ────────────────────────────────────────────────────────
 
 unsafe fn cstr_to_str(ptr: *const c_char) -> String {
-    if ptr.is_null() { return String::new(); }
+    if ptr.is_null() {
+        return String::new();
+    }
     CStr::from_ptr(ptr).to_string_lossy().to_string()
 }
 
@@ -62,10 +79,7 @@ fn str_to_cstring(s: &str) -> *mut c_char {
 /// or {"status":"unchanged"} or {"status":"error","message":"..."}.
 /// Caller must free with `headroom_free`.
 #[no_mangle]
-pub extern "C" fn headroom_compress(
-    content: *const c_char,
-    content_type: u8,
-) -> *mut c_char {
+pub extern "C" fn headroom_compress(content: *const c_char, content_type: u8) -> *mut c_char {
     let input = unsafe { cstr_to_str(content) };
     let result = match content_type {
         0 => compress_json(&input),
@@ -111,7 +125,9 @@ fn compress_json(input: &str) -> String {
         }
     }
     if omitted > 0 {
-        selected.push(serde_json::Value::String(format!("… {omitted} items omitted …")));
+        selected.push(serde_json::Value::String(format!(
+            "… {omitted} items omitted …"
+        )));
     }
     for item in items.iter().skip(total.saturating_sub(3)) {
         selected.push(item.clone());
@@ -146,26 +162,35 @@ fn compress_diff(input: &str) -> String {
             if in_hunk && !hunk_lines.is_empty() {
                 total_hunks += 1;
                 if total_hunks <= 2 || hunk_lines.len() <= 3 {
-                    for hl in &hunk_lines { compressed.push_str(hl); compressed.push('\n'); }
+                    for hl in &hunk_lines {
+                        compressed.push_str(hl);
+                        compressed.push('\n');
+                    }
                 }
             }
-            compressed.push_str(line); compressed.push('\n');
+            compressed.push_str(line);
+            compressed.push('\n');
             in_hunk = false;
             hunk_lines.clear();
         } else if line.starts_with("@@") {
             if in_hunk && !hunk_lines.is_empty() {
                 total_hunks += 1;
                 if total_hunks <= 2 || hunk_lines.len() <= 3 {
-                    for hl in &hunk_lines { compressed.push_str(hl); compressed.push('\n'); }
+                    for hl in &hunk_lines {
+                        compressed.push_str(hl);
+                        compressed.push('\n');
+                    }
                 }
             }
-            compressed.push_str(line); compressed.push('\n');
+            compressed.push_str(line);
+            compressed.push('\n');
             in_hunk = true;
             hunk_lines.clear();
         } else if in_hunk {
             hunk_lines.push(line);
         } else {
-            compressed.push_str(line); compressed.push('\n');
+            compressed.push_str(line);
+            compressed.push('\n');
         }
     }
 
@@ -194,7 +219,11 @@ fn compress_log(input: &str) -> String {
     let mut selected: Vec<(usize, &str)> = Vec::new();
     for (i, line) in input.lines().enumerate() {
         let lower = line.to_lowercase();
-        if lower.contains("error") || lower.contains("fail") || lower.contains("warn") || lower.contains("panic") {
+        if lower.contains("error")
+            || lower.contains("fail")
+            || lower.contains("warn")
+            || lower.contains("panic")
+        {
             // Add context window
             let start = i.saturating_sub(2);
             let end = (i + 3).min(input.lines().count());
@@ -208,7 +237,11 @@ fn compress_log(input: &str) -> String {
     selected.sort_by_key(|(i, _)| *i);
     selected.dedup_by_key(|(i, _)| *i);
 
-    let compressed: String = selected.iter().map(|(_, l)| *l).collect::<Vec<_>>().join("\n");
+    let compressed: String = selected
+        .iter()
+        .map(|(_, l)| *l)
+        .collect::<Vec<_>>()
+        .join("\n");
     let compressed_bytes = compressed.len();
     if compressed_bytes >= original_bytes * 8 / 10 || selected.is_empty() {
         return serde_json::json!({"status":"unchanged"}).to_string();
@@ -240,20 +273,34 @@ fn compress_text(input: &str) -> String {
     }
 
     let keep = (sentences.len() / 2).max(3);
-    let mut scored: Vec<(usize, f64)> = sentences.iter().enumerate().map(|(i, s)| {
-        let mut score = 0.0;
-        let lower = s.to_lowercase();
-        if lower.contains("error") || lower.contains("fail") { score += 0.5; }
-        if lower.contains("warn") { score += 0.3; }
-        score += (s.chars().filter(|c| c.is_ascii_digit()).count() as f64 / s.len().max(1) as f64) * 0.2;
-        score += (i as f64 / sentences.len() as f64) * 0.3;
-        (i, score)
-    }).collect();
+    let mut scored: Vec<(usize, f64)> = sentences
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let mut score = 0.0;
+            let lower = s.to_lowercase();
+            if lower.contains("error") || lower.contains("fail") {
+                score += 0.5;
+            }
+            if lower.contains("warn") {
+                score += 0.3;
+            }
+            score += (s.chars().filter(|c| c.is_ascii_digit()).count() as f64
+                / s.len().max(1) as f64)
+                * 0.2;
+            score += (i as f64 / sentences.len() as f64) * 0.3;
+            (i, score)
+        })
+        .collect();
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     let mut indices: Vec<usize> = scored.iter().take(keep).map(|(i, _)| *i).collect();
     indices.sort();
 
-    let compressed: String = indices.iter().map(|&i| sentences[i]).collect::<Vec<_>>().join(". ");
+    let compressed: String = indices
+        .iter()
+        .map(|&i| sentences[i])
+        .collect::<Vec<_>>()
+        .join(". ");
     let compressed_bytes = compressed.len();
 
     let ccr_hash = CCR.lock().unwrap().store(input);

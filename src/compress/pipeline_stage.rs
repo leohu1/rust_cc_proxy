@@ -235,9 +235,7 @@ mod tests {
     fn test_string_content_compressed() {
         let stage = CompressionStage::new(make_compressor());
 
-        let items: Vec<Value> = (0..50)
-            .map(|i| serde_json::json!({"id": i}))
-            .collect();
+        let items: Vec<Value> = (0..50).map(|i| serde_json::json!({"id": i})).collect();
         let large_json = serde_json::to_string(&items).unwrap();
 
         let mut body = serde_json::json!({

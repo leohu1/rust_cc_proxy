@@ -63,8 +63,9 @@ impl Config {
             .parse()
             .map_err(|e| crate::error::AppError::ConfigError(format!("invalid PROXY_PORT: {e}")))?;
         let bind_addr = SocketAddr::new(
-            host.parse()
-                .map_err(|e| crate::error::AppError::ConfigError(format!("invalid PROXY_HOST: {e}")))?,
+            host.parse().map_err(|e| {
+                crate::error::AppError::ConfigError(format!("invalid PROXY_HOST: {e}"))
+            })?,
             port,
         );
 
@@ -76,12 +77,8 @@ impl Config {
         let upstream = UpstreamConfig {
             base_url: env_or("PROXY_UPSTREAM", "https://api.anthropic.com"),
             api_key: std::env::var("PROXY_API_KEY").ok(),
-            timeout_secs: env_or("PROXY_TIMEOUT", "600")
-                .parse()
-                .unwrap_or(600),
-            pool_max_connections: env_or("PROXY_POOL_MAX", "20")
-                .parse()
-                .unwrap_or(20),
+            timeout_secs: env_or("PROXY_TIMEOUT", "600").parse().unwrap_or(600),
+            pool_max_connections: env_or("PROXY_POOL_MAX", "20").parse().unwrap_or(20),
         };
 
         // Build provider configs from env vars
@@ -246,13 +243,10 @@ mod tests {
 
     #[test]
     fn test_custom_host_and_port() {
-        with_env_vars(
-            &[("PROXY_HOST", "0.0.0.0"), ("PROXY_PORT", "9999")],
-            || {
-                let config = Config::from_env().unwrap();
-                assert_eq!(config.server.bind_addr.to_string(), "0.0.0.0:9999");
-            },
-        );
+        with_env_vars(&[("PROXY_HOST", "0.0.0.0"), ("PROXY_PORT", "9999")], || {
+            let config = Config::from_env().unwrap();
+            assert_eq!(config.server.bind_addr.to_string(), "0.0.0.0:9999");
+        });
     }
 
     #[test]
@@ -276,16 +270,19 @@ mod tests {
 
     #[test]
     fn test_deepseek_auto_enabled_by_api_key_only() {
-        with_env_vars(
-            &[("DEEPSEEK_API_KEY", "sk-ds-key-only")],
-            || {
-                let config = Config::from_env().unwrap();
-                assert_eq!(config.providers.len(), 1, "DeepSeek should auto-enable with just API key");
-                let ds = config.providers.get("deepseek").unwrap();
-                assert_eq!(ds.upstream_url, "https://api.deepseek.com/anthropic",
-                    "upstream should default when only API key is set");
-            },
-        );
+        with_env_vars(&[("DEEPSEEK_API_KEY", "sk-ds-key-only")], || {
+            let config = Config::from_env().unwrap();
+            assert_eq!(
+                config.providers.len(),
+                1,
+                "DeepSeek should auto-enable with just API key"
+            );
+            let ds = config.providers.get("deepseek").unwrap();
+            assert_eq!(
+                ds.upstream_url, "https://api.deepseek.com/anthropic",
+                "upstream should default when only API key is set"
+            );
+        });
     }
 
     #[test]

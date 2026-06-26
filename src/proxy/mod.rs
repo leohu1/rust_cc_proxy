@@ -123,18 +123,17 @@ impl ProxyClient {
         if !response.status().is_success() {
             let status = response.status().as_u16();
             let resp_body = response.text().await.unwrap_or_default();
-            return Err(AppError::UpstreamError { status, body: resp_body });
+            return Err(AppError::UpstreamError {
+                status,
+                body: resp_body,
+            });
         }
 
         Ok(response)
     }
 
     /// Build the set of headers to forward to the upstream.
-    fn build_forward_headers(
-        &self,
-        incoming: &HeaderMap,
-        extra: HeaderMap,
-    ) -> HeaderMap {
+    fn build_forward_headers(&self, incoming: &HeaderMap, extra: HeaderMap) -> HeaderMap {
         let mut headers = HeaderMap::new();
 
         // Forward relevant headers from the client request

@@ -84,7 +84,10 @@ impl PipelineStage for SystemRoleNormalizer {
             map.insert("system".to_string(), Value::String(merged_text));
         }
 
-        tracing::debug!("Extracted {} system messages from messages[] array", system_indices.len());
+        tracing::debug!(
+            "Extracted {} system messages from messages[] array",
+            system_indices.len()
+        );
 
         Ok(())
     }

@@ -23,9 +23,7 @@ pub struct Pipeline {
 
 impl Pipeline {
     pub fn new() -> Self {
-        Pipeline {
-            stages: Vec::new(),
-        }
+        Pipeline { stages: Vec::new() }
     }
 
     /// Append a stage to the pipeline.

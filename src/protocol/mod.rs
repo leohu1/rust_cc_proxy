@@ -1,3 +1,3 @@
 pub mod messages;
-pub mod sse_types;
 pub mod models;
+pub mod sse_types;

@@ -12,7 +12,7 @@ use std::time::Instant;
 struct Bucket {
     tokens: f64,
     last_refill: Instant,
-    rate: f64,   // tokens per second
+    rate: f64,     // tokens per second
     capacity: f64, // max tokens (burst)
 }
 

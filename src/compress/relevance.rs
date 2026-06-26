@@ -28,10 +28,7 @@ impl BM25Scorer {
         let item_tokens: Vec<Vec<String>> = items.iter().map(|s| tokenize(s)).collect();
 
         // Compute average document length
-        let avgdl: f64 = item_tokens
-            .iter()
-            .map(|t| t.len() as f64)
-            .sum::<f64>()
+        let avgdl: f64 = item_tokens.iter().map(|t| t.len() as f64).sum::<f64>()
             / (item_tokens.len() as f64).max(1.0);
 
         // Compute IDF for query terms
@@ -85,7 +82,17 @@ impl BM25Scorer {
 pub fn tokenize(text: &str) -> Vec<String> {
     let mut tokens: Vec<String> = Vec::new();
     for word in text.split(|c: char| c.is_whitespace() || c == ',' || c == ':' || c == ';') {
-        let trimmed = word.trim_matches(|c: char| c == '"' || c == '\'' || c == '{' || c == '}' || c == '[' || c == ']' || c == '.' || c == '!' || c == '?');
+        let trimmed = word.trim_matches(|c: char| {
+            c == '"'
+                || c == '\''
+                || c == '{'
+                || c == '}'
+                || c == '['
+                || c == ']'
+                || c == '.'
+                || c == '!'
+                || c == '?'
+        });
         if trimmed.len() >= 2 {
             tokens.push(trimmed.to_lowercase());
         }
@@ -107,9 +114,8 @@ pub fn select_top_by_relevance(
     // Build scored indices for middle items
     let middle_start = always_keep_first;
     let middle_end = total.saturating_sub(always_keep_last);
-    let mut middle: Vec<(usize, f64)> = (middle_start..middle_end)
-        .map(|i| (i, scores[i]))
-        .collect();
+    let mut middle: Vec<(usize, f64)> =
+        (middle_start..middle_end).map(|i| (i, scores[i])).collect();
     middle.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     // Select: first N always kept, top N from middle by score, last N always kept

@@ -134,7 +134,9 @@ impl Compressor {
                     ContentType::JsonObject => self.compress_json_object_str(content),
                     ContentType::Diff => self.diff_compressor.compress(content, &self.ccr_store),
                     ContentType::Log => self.log_compressor.compress(content, &self.ccr_store),
-                    ContentType::PlainText => self.text_compressor.compress(content, &self.ccr_store),
+                    ContentType::PlainText => {
+                        self.text_compressor.compress(content, &self.ccr_store)
+                    }
                     ContentType::Unknown => CompressionResult::Skipped,
                 }
             }
@@ -143,7 +145,10 @@ impl Compressor {
         // ── Tokenizer validation gate ────────────────────────────
         // Verify compressed output actually has fewer tokens. If not,
         // return Unchanged to avoid wasting tokens on ineffective compression.
-        if let CompressionResult::Compressed { ref replacement, .. } = &result {
+        if let CompressionResult::Compressed {
+            ref replacement, ..
+        } = &result
+        {
             let compressed_tokens = estimate_tokens(replacement);
             if compressed_tokens >= original_tokens {
                 tracing::debug!(
@@ -178,8 +183,10 @@ impl Compressor {
 
         // Build query context from error items + first/last items
         let query = build_query_context(items);
-        let item_strs: Vec<String> =
-            items.iter().map(|v| serde_json::to_string(v).unwrap_or_default()).collect();
+        let item_strs: Vec<String> = items
+            .iter()
+            .map(|v| serde_json::to_string(v).unwrap_or_default())
+            .collect();
         let item_refs: Vec<&str> = item_strs.iter().map(|s| s.as_str()).collect();
         let scores = self.bm25.score_items(&item_refs, &query);
 
@@ -308,9 +315,7 @@ fn detect_content_type(content: &str) -> ContentType {
     }
 
     // Diff detection
-    if trimmed.contains("diff --git ")
-        || (trimmed.starts_with("@@ -") && trimmed.contains("+"))
-    {
+    if trimmed.contains("diff --git ") || (trimmed.starts_with("@@ -") && trimmed.contains("+")) {
         return ContentType::Diff;
     }
 
@@ -398,14 +403,11 @@ fn summarize_object(obj: &Value) -> Value {
             Value::Object(result)
         }
         Value::Array(items) if items.len() > 5 => {
-            let mut summary: Vec<Value> =
-                items[..3].iter().map(summarize_value).collect();
+            let mut summary: Vec<Value> = items[..3].iter().map(summarize_value).collect();
             summary.push(Value::String(format!("... {} more", items.len() - 3)));
             Value::Array(summary)
         }
-        Value::Array(items) => {
-            Value::Array(items.iter().map(summarize_value).collect())
-        }
+        Value::Array(items) => Value::Array(items.iter().map(summarize_value).collect()),
         Value::String(s) if s.len() > 200 => {
             Value::String(format!("{}... ({} chars)", &s[..200], s.len()))
         }
@@ -445,22 +447,23 @@ mod tests {
 
     #[test]
     fn test_detect_log() {
-        let content =
-            "ERROR: fail\nWARNING: warn\nINFO: info\nDEBUG: debug\ntraceback: ...";
+        let content = "ERROR: fail\nWARNING: warn\nINFO: info\nDEBUG: debug\ntraceback: ...";
         assert_eq!(detect_content_type(content), ContentType::Log);
     }
 
     #[test]
     fn test_compress_json_array_with_bm25() {
         let items: Vec<Value> = (0..100)
-            .map(|i| {
-                serde_json::json!({"id": i, "name": format!("item-{i}"), "value": i * 10})
-            })
+            .map(|i| serde_json::json!({"id": i, "name": format!("item-{i}"), "value": i * 10}))
             .collect();
         let json = serde_json::to_string(&items).unwrap();
         let c = Compressor::new(100, 10);
         match c.compress_string(&json).unwrap() {
-            CompressionResult::Compressed { compressed_bytes, original_bytes, .. } => {
+            CompressionResult::Compressed {
+                compressed_bytes,
+                original_bytes,
+                ..
+            } => {
                 assert!(compressed_bytes < original_bytes);
             }
             other => panic!("expected Compressed, got {other:?}"),
@@ -473,7 +476,11 @@ mod tests {
         diff.push_str("diff --git a/src/main.rs b/src/main.rs\n");
         diff.push_str("--- a/src/main.rs\n+++ b/src/main.rs\n");
         for i in 0..100 {
-            diff.push_str(&format!("@@ -{},3 +{},3 @@ fn foo\n", i * 10 + 1, i * 10 + 1));
+            diff.push_str(&format!(
+                "@@ -{},3 +{},3 @@ fn foo\n",
+                i * 10 + 1,
+                i * 10 + 1
+            ));
             diff.push_str(" unchanged context\n");
             diff.push_str(&format!("-old line {i}\n"));
             diff.push_str(&format!("+new line {i}\n"));
@@ -548,10 +555,15 @@ mod tests {
         let result = c.compress_string(&json).unwrap();
         // Large JSON array should be compressed AND pass token validation
         match result {
-            CompressionResult::Compressed { ref replacement, .. } => {
+            CompressionResult::Compressed {
+                ref replacement, ..
+            } => {
                 let orig = estimate_tokens(&json);
                 let comp = estimate_tokens(replacement);
-                assert!(comp < orig, "compressed tokens ({comp}) < original ({orig})");
+                assert!(
+                    comp < orig,
+                    "compressed tokens ({comp}) < original ({orig})"
+                );
             }
             _ => {} // DLL may return Unchanged if it deems the content already efficient
         }
@@ -580,7 +592,10 @@ mod tests {
                 CompressionResult::Compressed { ccr_hash, .. } => {
                     // Verify CCR round-trip through DLL
                     let original = c.retrieve(&ccr_hash);
-                    assert!(original.is_some(), "DLL CCR should store compressed content");
+                    assert!(
+                        original.is_some(),
+                        "DLL CCR should store compressed content"
+                    );
                     let parsed: Value = serde_json::from_str(&original.unwrap()).unwrap();
                     assert_eq!(parsed.as_array().unwrap().len(), 50);
                 }

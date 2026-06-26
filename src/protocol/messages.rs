@@ -108,13 +108,9 @@ pub enum ContentBlock {
         signature: Option<String>,
     },
     #[serde(rename = "redacted_thinking")]
-    RedactedThinking {
-        data: String,
-    },
+    RedactedThinking { data: String },
     #[serde(rename = "image")]
-    Image {
-        source: ImageSource,
-    },
+    Image { source: ImageSource },
 }
 
 /// Cache control marker for prompt caching.
@@ -188,9 +184,19 @@ pub struct Tool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ToolChoice {
-    Auto { #[serde(rename = "type")] choice_type: String },
-    Any { #[serde(rename = "type")] choice_type: String },
-    Tool { #[serde(rename = "type")] choice_type: String, name: String },
+    Auto {
+        #[serde(rename = "type")]
+        choice_type: String,
+    },
+    Any {
+        #[serde(rename = "type")]
+        choice_type: String,
+    },
+    Tool {
+        #[serde(rename = "type")]
+        choice_type: String,
+        name: String,
+    },
 }
 
 /// Thinking / extended reasoning configuration.
@@ -240,10 +246,7 @@ pub enum ResponseContentBlock {
         input: serde_json::Value,
     },
     #[serde(rename = "thinking")]
-    Thinking {
-        thinking: String,
-        signature: String,
-    },
+    Thinking { thinking: String, signature: String },
     #[serde(rename = "redacted_thinking")]
     RedactedThinking { data: String },
 }

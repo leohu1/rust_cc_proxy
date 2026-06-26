@@ -53,8 +53,7 @@ impl DiffCompressor {
 
         for (idx, file) in files.iter().enumerate() {
             if !selected.contains(&idx) {
-                if idx == selected.iter().max().unwrap_or(&0) + 1 && selected.len() < files.len()
-                {
+                if idx == selected.iter().max().unwrap_or(&0) + 1 && selected.len() < files.len() {
                     compressed.push_str(&format!(
                         "… {} more files omitted …\n",
                         files.len() - selected.len()
@@ -80,7 +79,7 @@ impl DiffCompressor {
                 let mut middle: Vec<(usize, usize)> = (1..hunk_count - 1)
                     .map(|i| (i, file.hunks[i].change_lines()))
                     .collect();
-                middle.sort_by_key(|(_, c)| -( *c as i64));
+                middle.sort_by_key(|(_, c)| -(*c as i64));
                 let mid_keep = (self.max_hunks_per_file - 2).min(middle.len());
                 for (i, _) in middle.iter().take(mid_keep) {
                     hunk_indices.push(*i);
@@ -97,11 +96,7 @@ impl DiffCompressor {
                 let hunk = &file.hunks[hi];
                 compressed.push_str(&format!(
                     "@@ -{},{} +{},{} @@ {}\n",
-                    hunk.old_start,
-                    hunk.old_count,
-                    hunk.new_start,
-                    hunk.new_count,
-                    hunk.section,
+                    hunk.old_start, hunk.old_count, hunk.new_start, hunk.new_count, hunk.section,
                 ));
                 let trimmed = trim_context(&hunk.lines, self.max_context);
                 compressed.push_str(&trimmed);
@@ -268,8 +263,7 @@ fn trim_context(lines: &[String], max_context: usize) -> String {
             // Flush context buffer (trimmed)
             let keep = if context_buf.len() > max_context * 2 {
                 let front: Vec<&str> = context_buf[..max_context].to_vec();
-                let back: Vec<&str> =
-                    context_buf[context_buf.len() - max_context..].to_vec();
+                let back: Vec<&str> = context_buf[context_buf.len() - max_context..].to_vec();
                 result.push_str(&format!(
                     "… {} context lines …\n",
                     context_buf.len() - max_context * 2

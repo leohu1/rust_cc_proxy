@@ -54,9 +54,7 @@ impl Provider for DeepSeekProvider {
 
     fn resolve_model(&self, client_model: &str) -> String {
         // Map claude- prefixed model names back to DeepSeek model names
-        let stripped = client_model
-            .strip_prefix("claude-")
-            .unwrap_or(client_model);
+        let stripped = client_model.strip_prefix("claude-").unwrap_or(client_model);
 
         match stripped {
             "deepseek-v4-pro" | "deepseek-v4-flash" => stripped.to_string(),
@@ -142,12 +140,9 @@ fn normalize_thinking(body: &mut Value) {
                     if let Some(content) = msg.get_mut("content") {
                         if let Some(blocks) = content.as_array_mut() {
                             blocks.retain(|block| {
-                                let block_type = block
-                                    .get("type")
-                                    .and_then(|t| t.as_str())
-                                    .unwrap_or("");
-                                block_type != "thinking"
-                                    && block_type != "redacted_thinking"
+                                let block_type =
+                                    block.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                                block_type != "thinking" && block_type != "redacted_thinking"
                             });
                         }
                     }
@@ -198,9 +193,10 @@ fn inject_thinking_blocks(body: &mut Value) {
 
         if has_tool_use && !has_thinking {
             // Find the first tool_use block and insert thinking before it
-            if let Some(pos) = blocks.iter().position(|b| {
-                b.get("type").and_then(|t| t.as_str()) == Some("tool_use")
-            }) {
+            if let Some(pos) = blocks
+                .iter()
+                .position(|b| b.get("type").and_then(|t| t.as_str()) == Some("tool_use"))
+            {
                 blocks.insert(
                     pos,
                     serde_json::json!({

@@ -55,9 +55,8 @@ fn do_stream(
         }
     });
 
-    ReceiverStream::new(rx).map(|result| {
-        result.map_err(|e| actix_web::error::ErrorBadGateway(e.to_string()))
-    })
+    ReceiverStream::new(rx)
+        .map(|result| result.map_err(|e| actix_web::error::ErrorBadGateway(e.to_string())))
 }
 
 /// Scan a chunk of SSE bytes for `message_start` (input_tokens) and

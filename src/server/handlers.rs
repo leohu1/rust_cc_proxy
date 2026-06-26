@@ -67,7 +67,10 @@ pub async fn models_handler(state: web::Data<AppState>) -> HttpResponse {
 /// Ref: https://api-docs.deepseek.com/api/get-user-balance
 pub async fn balance_handler(state: web::Data<AppState>) -> HttpResponse {
     // DeepSeek real balance: GET https://api.deepseek.com/user/balance (fixed URL)
-    if let Some(_) = state.provider_registry.get(&crate::providers::ProviderKind::DeepSeek) {
+    if let Some(_) = state
+        .provider_registry
+        .get(&crate::providers::ProviderKind::DeepSeek)
+    {
         let api_key = state
             .config
             .providers
@@ -88,11 +91,15 @@ pub async fn balance_handler(state: web::Data<AppState>) -> HttpResponse {
             );
 
             // Balance API uses the base domain, NOT the /anthropic endpoint
-            match state.proxy_client.forward_get(
-                "/user/balance",
-                Some("https://api.deepseek.com"), // Fixed URL per official docs
-                headers,
-            ).await {
+            match state
+                .proxy_client
+                .forward_get(
+                    "/user/balance",
+                    Some("https://api.deepseek.com"), // Fixed URL per official docs
+                    headers,
+                )
+                .await
+            {
                 Ok(resp) => {
                     let body: serde_json::Value = match resp.json().await {
                         Ok(v) => v,
@@ -102,11 +109,16 @@ pub async fn balance_handler(state: web::Data<AppState>) -> HttpResponse {
                             }))
                         }
                     };
-                    tracing::debug!("DeepSeek balance: {}", serde_json::to_string(&body).unwrap_or_default());
+                    tracing::debug!(
+                        "DeepSeek balance: {}",
+                        serde_json::to_string(&body).unwrap_or_default()
+                    );
                     return HttpResponse::Ok().json(body);
                 }
                 Err(e) => {
-                    tracing::warn!("DeepSeek balance proxy failed: {e}, falling back to token stats");
+                    tracing::warn!(
+                        "DeepSeek balance proxy failed: {e}, falling back to token stats"
+                    );
                 }
             }
         }
@@ -153,9 +165,7 @@ pub async fn retrieve_handler(
                 "hash": hash,
                 "content": content,
             }))),
-            None => Err(AppError::InvalidRequest(format!(
-                "hash not found: {hash}"
-            ))),
+            None => Err(AppError::InvalidRequest(format!("hash not found: {hash}"))),
         },
         None => Err(AppError::InvalidRequest(
             "compression is not enabled".into(),
@@ -189,11 +199,15 @@ pub async fn messages_handler(
             .get("model")
             .and_then(|m| m.as_str())
             .unwrap_or("default");
-        if model.starts_with("deepseek") { "deepseek" } else { "anthropic" }
+        if model.starts_with("deepseek") {
+            "deepseek"
+        } else {
+            "anthropic"
+        }
     };
     if !state.rate_limiter.allow(provider_name) {
         return Err(AppError::InvalidRequest(
-            "rate limit exceeded, try again later".into()
+            "rate limit exceeded, try again later".into(),
         ));
     }
 
@@ -281,10 +295,8 @@ pub async fn messages_handler(
         }
 
         // Intercept SSE to extract token usage from message_start/message_delta
-        let sse_stream = streaming::into_sse_stream_with_monitor(
-            response,
-            state.token_monitor.clone(),
-        );
+        let sse_stream =
+            streaming::into_sse_stream_with_monitor(response, state.token_monitor.clone());
 
         Ok(HttpResponse::Ok()
             .content_type("text/event-stream")

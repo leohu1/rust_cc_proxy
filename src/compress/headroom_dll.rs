@@ -69,7 +69,11 @@ impl HeadroomDll {
 #[cfg(windows)]
 fn load_platform_dll(path: &PathBuf) -> Option<HeadroomDll> {
     use std::os::windows::ffi::OsStrExt;
-    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    let wide: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
     let handle = unsafe { LoadLibraryW(wide.as_ptr()) };
     if handle.is_null() {
         tracing::warn!("LoadLibraryW failed for {}", path.display());
@@ -78,20 +82,31 @@ fn load_platform_dll(path: &PathBuf) -> Option<HeadroomDll> {
     let compress: CompressFn = unsafe { get_proc(handle, "headroom_compress")? };
     let retrieve: RetrieveFn = unsafe { get_proc(handle, "headroom_retrieve")? };
     let free: FreeFn = unsafe { get_proc(handle, "headroom_free")? };
-    Some(HeadroomDll { compress, retrieve, free })
+    Some(HeadroomDll {
+        compress,
+        retrieve,
+        free,
+    })
 }
 
 #[cfg(windows)]
 unsafe fn get_proc<T>(handle: *mut std::ffi::c_void, name: &str) -> Option<T> {
     let c_name = std::ffi::CString::new(name).ok()?;
     let ptr = GetProcAddress(handle, c_name.as_ptr() as *const u8);
-    if ptr.is_null() { None } else { Some(std::mem::transmute_copy(&ptr)) }
+    if ptr.is_null() {
+        None
+    } else {
+        Some(std::mem::transmute_copy(&ptr))
+    }
 }
 
 #[cfg(windows)]
 extern "system" {
     fn LoadLibraryW(lpFileName: *const u16) -> *mut std::ffi::c_void;
-    fn GetProcAddress(hModule: *mut std::ffi::c_void, lpProcName: *const u8) -> *mut std::ffi::c_void;
+    fn GetProcAddress(
+        hModule: *mut std::ffi::c_void,
+        lpProcName: *const u8,
+    ) -> *mut std::ffi::c_void;
 }
 
 #[cfg(not(windows))]
@@ -107,7 +122,11 @@ fn load_platform_dll(path: &PathBuf) -> Option<HeadroomDll> {
         let compress = get_sym(handle, "headroom_compress")?;
         let retrieve = get_sym(handle, "headroom_retrieve")?;
         let free = get_sym(handle, "headroom_free")?;
-        Some(HeadroomDll { compress, retrieve, free })
+        Some(HeadroomDll {
+            compress,
+            retrieve,
+            free,
+        })
     }
 }
 
@@ -115,7 +134,11 @@ fn load_platform_dll(path: &PathBuf) -> Option<HeadroomDll> {
 unsafe fn get_sym<T>(handle: *mut std::ffi::c_void, name: &str) -> Option<T> {
     let c_name = std::ffi::CString::new(name).ok()?;
     let ptr = libc::dlsym(handle, c_name.as_ptr());
-    if ptr.is_null() { None } else { Some(std::mem::transmute_copy(&ptr)) }
+    if ptr.is_null() {
+        None
+    } else {
+        Some(std::mem::transmute_copy(&ptr))
+    }
 }
 
 // ── DLL search ────────────────────────────────────────────────────
@@ -127,14 +150,21 @@ fn find_dll() -> Option<PathBuf> {
             return Some(p);
         }
     }
-    let exe_dir = std::env::current_exe().ok()?.parent().map(|p| p.to_path_buf())?;
+    let exe_dir = std::env::current_exe()
+        .ok()?
+        .parent()
+        .map(|p| p.to_path_buf())?;
     for name in &["headroom_core.dll", "headroom_ffi.dll"] {
         let p = exe_dir.join(name);
-        if p.exists() { return Some(p); }
+        if p.exists() {
+            return Some(p);
+        }
     }
     for name in &["headroom_core.dll", "headroom_ffi.dll"] {
         let p = PathBuf::from(name);
-        if p.exists() { return Some(p); }
+        if p.exists() {
+            return Some(p);
+        }
     }
     None
 }

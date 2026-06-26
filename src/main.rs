@@ -38,10 +38,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .log_level
         .clone()
         .or_else(|| std::env::var("PROXY_LOG_LEVEL").ok())
-        .unwrap_or_else(|| if cli.dev { "debug".to_string() } else { "info".to_string() });
+        .unwrap_or_else(|| {
+            if cli.dev {
+                "debug".to_string()
+            } else {
+                "info".to_string()
+            }
+        });
 
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(&log_level));
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&log_level));
 
     tracing_subscriber::fmt()
         .with_env_filter(env_filter)

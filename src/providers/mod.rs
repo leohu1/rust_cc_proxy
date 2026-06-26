@@ -117,10 +117,7 @@ impl ProviderRegistry {
 }
 
 /// Build a provider from its configuration.
-pub fn create_provider(
-    kind: ProviderKind,
-    config: &ProviderConfig,
-) -> Arc<dyn Provider> {
+pub fn create_provider(kind: ProviderKind, config: &ProviderConfig) -> Arc<dyn Provider> {
     match kind {
         ProviderKind::Anthropic => Arc::new(anthropic::AnthropicProvider::new(config)),
         ProviderKind::DeepSeek => Arc::new(deepseek::DeepSeekProvider::new(config)),

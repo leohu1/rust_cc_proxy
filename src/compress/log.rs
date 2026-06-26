@@ -40,8 +40,7 @@ impl LogCompressor {
 
         // Select top lines
         let mut selected: Vec<usize> = Vec::new();
-        let mut ranked: Vec<(usize, i32)> =
-            scored.iter().map(|(i, s, _)| (*i, *s)).collect();
+        let mut ranked: Vec<(usize, i32)> = scored.iter().map(|(i, s, _)| (*i, *s)).collect();
         ranked.sort_by_key(|(_, s)| -*s);
 
         let keep = self.max_lines.min(lines.len());
@@ -155,8 +154,7 @@ fn score_line(line: &str, _format: &LogFormat) -> i32 {
 
     // Error/fail lines are highest priority
     if lower.contains("error") || lower.contains("fail") || lower.contains("panic") {
-        if lower.contains("error[") || lower.contains("traceback") || lower.contains("exception")
-        {
+        if lower.contains("error[") || lower.contains("traceback") || lower.contains("exception") {
             return 100;
         }
         return 80;
@@ -202,7 +200,8 @@ mod tests {
 
     #[test]
     fn test_detect_pytest() {
-        let log = "============================= test session starts =============================\n...";
+        let log =
+            "============================= test session starts =============================\n...";
         assert!(matches!(detect_format(log), LogFormat::Pytest));
     }
 
@@ -214,7 +213,10 @@ mod tests {
 
     #[test]
     fn test_score_error_line() {
-        assert_eq!(score_line("error: connection refused", &LogFormat::Generic), 80);
+        assert_eq!(
+            score_line("error: connection refused", &LogFormat::Generic),
+            80
+        );
         assert_eq!(
             score_line("thread panicked at src/main.rs:42", &LogFormat::Generic),
             80

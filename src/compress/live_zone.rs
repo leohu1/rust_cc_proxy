@@ -19,7 +19,9 @@ pub struct SurgeryReport {
 }
 
 pub fn hash_messages(messages: &[Value]) -> String {
-    if messages.is_empty() { return String::new(); }
+    if messages.is_empty() {
+        return String::new();
+    }
     let bytes = serde_json::to_vec(messages).unwrap_or_default();
     let mut h = Sha256::new();
     h.update(&bytes);
@@ -31,20 +33,43 @@ pub fn operate(body_bytes: &[u8], compressor: &Compressor) -> SurgeryReport {
         Ok(v) => v,
         Err(e) => {
             tracing::warn!("Live-zone: parse failed: {e}");
-            return SurgeryReport { body: body_bytes.to_vec(), blocks_compressed: 0, bytes_saved: 0, prefix_integrity_ok: true };
+            return SurgeryReport {
+                body: body_bytes.to_vec(),
+                blocks_compressed: 0,
+                bytes_saved: 0,
+                prefix_integrity_ok: true,
+            };
         }
     };
 
     let messages = match body.get_mut("messages").and_then(|m| m.as_array_mut()) {
         Some(m) => m,
-        None => return SurgeryReport { body: body_bytes.to_vec(), blocks_compressed: 0, bytes_saved: 0, prefix_integrity_ok: true },
+        None => {
+            return SurgeryReport {
+                body: body_bytes.to_vec(),
+                blocks_compressed: 0,
+                bytes_saved: 0,
+                prefix_integrity_ok: true,
+            }
+        }
     };
 
-    let user_idx = match messages.iter().enumerate().rev()
+    let user_idx = match messages
+        .iter()
+        .enumerate()
+        .rev()
         .find(|(_, m)| m.get("role").and_then(|r| r.as_str()) == Some("user"))
-        .map(|(i, _)| i) {
+        .map(|(i, _)| i)
+    {
         Some(i) => i,
-        None => return SurgeryReport { body: body_bytes.to_vec(), blocks_compressed: 0, bytes_saved: 0, prefix_integrity_ok: true },
+        None => {
+            return SurgeryReport {
+                body: body_bytes.to_vec(),
+                blocks_compressed: 0,
+                bytes_saved: 0,
+                prefix_integrity_ok: true,
+            }
+        }
     };
 
     // ── Clone prefix for integrity check ─────────────────────────
@@ -52,40 +77,72 @@ pub fn operate(body_bytes: &[u8], compressor: &Compressor) -> SurgeryReport {
     let prefix_hash = hash_messages(&prefix_snapshot);
 
     // Cache-aware safety
-    let cache_safe = crate::compress::cache_aware::is_live_zone_safe_to_compress(&messages[user_idx]);
+    let cache_safe =
+        crate::compress::cache_aware::is_live_zone_safe_to_compress(&messages[user_idx]);
     if !cache_safe {
-        return SurgeryReport { body: body_bytes.to_vec(), blocks_compressed: 0, bytes_saved: 0, prefix_integrity_ok: true };
+        return SurgeryReport {
+            body: body_bytes.to_vec(),
+            blocks_compressed: 0,
+            bytes_saved: 0,
+            prefix_integrity_ok: true,
+        };
     }
 
     // ── Compress tool_result blocks in live zone ──────────────────
     let user_msg = &mut messages[user_idx];
     let blocks = match user_msg.get_mut("content").and_then(|c| c.as_array_mut()) {
         Some(b) => b,
-        None => return SurgeryReport { body: body_bytes.to_vec(), blocks_compressed: 0, bytes_saved: 0, prefix_integrity_ok: true },
+        None => {
+            return SurgeryReport {
+                body: body_bytes.to_vec(),
+                blocks_compressed: 0,
+                bytes_saved: 0,
+                prefix_integrity_ok: true,
+            }
+        }
     };
 
     let mut compressed_count = 0usize;
     let mut bytes_saved = 0u64;
 
     for block in blocks.iter_mut() {
-        if block.get("type").and_then(|t| t.as_str()) != Some("tool_result") { continue; }
+        if block.get("type").and_then(|t| t.as_str()) != Some("tool_result") {
+            continue;
+        }
         let content = match block.get("content") {
             Some(Value::String(s)) => Some(s.clone()),
             Some(Value::Array(a)) => {
-                let t: String = a.iter().filter_map(|b| b.get("text").and_then(|t| t.as_str())).collect::<Vec<_>>().join("\n");
-                if t.is_empty() { None } else { Some(t) }
+                let t: String = a
+                    .iter()
+                    .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if t.is_empty() {
+                    None
+                } else {
+                    Some(t)
+                }
             }
             _ => None,
         };
-        let Some(ref text) = content else { continue; };
+        let Some(ref text) = content else {
+            continue;
+        };
 
         match compressor.compress_string(text) {
-            Ok(CompressionResult::Compressed { replacement, original_bytes, compressed_bytes: cb, .. }) => {
+            Ok(CompressionResult::Compressed {
+                replacement,
+                original_bytes,
+                compressed_bytes: cb,
+                ..
+            }) => {
                 bytes_saved += original_bytes as u64 - cb as u64;
                 compressed_count += 1;
                 match block.get_mut("content") {
                     Some(Value::String(s)) => *s = replacement,
-                    Some(Value::Array(a)) => *a = vec![serde_json::json!({"type":"text","text":replacement})],
+                    Some(Value::Array(a)) => {
+                        *a = vec![serde_json::json!({"type":"text","text":replacement})]
+                    }
                     _ => {}
                 }
                 tracing::debug!("Live-zone: {original_bytes}→{cb} bytes");
@@ -99,14 +156,26 @@ pub fn operate(body_bytes: &[u8], compressor: &Compressor) -> SurgeryReport {
     let prefix_ok = hash_messages(new_prefix) == prefix_hash;
     if !prefix_ok {
         tracing::warn!("Live-zone: PREFIX HASH MISMATCH — cache invalidated! Reverting.");
-        return SurgeryReport { body: body_bytes.to_vec(), blocks_compressed: 0, bytes_saved: 0, prefix_integrity_ok: false };
+        return SurgeryReport {
+            body: body_bytes.to_vec(),
+            blocks_compressed: 0,
+            bytes_saved: 0,
+            prefix_integrity_ok: false,
+        };
     }
 
     let new_body = serde_json::to_vec(&body).unwrap_or_else(|_| body_bytes.to_vec());
     if compressed_count > 0 {
-        tracing::info!("Live-zone: {compressed_count} blocks, ~{bytes_saved} bytes saved, prefix OK");
+        tracing::info!(
+            "Live-zone: {compressed_count} blocks, ~{bytes_saved} bytes saved, prefix OK"
+        );
     }
-    SurgeryReport { body: new_body, blocks_compressed: compressed_count, bytes_saved, prefix_integrity_ok: true }
+    SurgeryReport {
+        body: new_body,
+        blocks_compressed: compressed_count,
+        bytes_saved,
+        prefix_integrity_ok: true,
+    }
 }
 
 #[cfg(test)]
@@ -125,7 +194,9 @@ mod tests {
 
     #[test]
     fn test_live_zone_compresses() {
-        let items: Vec<Value> = (0..200).map(|i| serde_json::json!({"id":i,"body":"verbose ".repeat(50)})).collect();
+        let items: Vec<Value> = (0..200)
+            .map(|i| serde_json::json!({"id":i,"body":"verbose ".repeat(50)}))
+            .collect();
         let json = serde_json::to_string(&items).unwrap();
         let body = serde_json::json!({
             "model":"t","messages":[

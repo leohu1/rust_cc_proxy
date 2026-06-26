@@ -34,10 +34,7 @@ impl Provider for AnthropicProvider {
         let mut headers = HeaderMap::new();
         if let Some(ref api_key) = self.config.api_key {
             if let Ok(val) = HeaderValue::from_str(api_key) {
-                headers.insert(
-                    HeaderName::from_static("x-api-key"),
-                    val,
-                );
+                headers.insert(HeaderName::from_static("x-api-key"), val);
             }
         }
         headers

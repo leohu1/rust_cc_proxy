@@ -7,23 +7,16 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type")]
 pub enum SseEvent {
     #[serde(rename = "message_start")]
-    MessageStart {
-        message: SseMessageStart,
-    },
+    MessageStart { message: SseMessageStart },
     #[serde(rename = "content_block_start")]
     ContentBlockStart {
         index: u32,
         content_block: SseContentBlock,
     },
     #[serde(rename = "content_block_delta")]
-    ContentBlockDelta {
-        index: u32,
-        delta: SseDelta,
-    },
+    ContentBlockDelta { index: u32, delta: SseDelta },
     #[serde(rename = "content_block_stop")]
-    ContentBlockStop {
-        index: u32,
-    },
+    ContentBlockStop { index: u32 },
     #[serde(rename = "message_delta")]
     MessageDelta {
         delta: SseMessageDelta,
@@ -34,9 +27,7 @@ pub enum SseEvent {
     #[serde(rename = "ping")]
     Ping,
     #[serde(rename = "error")]
-    Error {
-        error: SseError,
-    },
+    Error { error: SseError },
 }
 
 /// Initial message metadata sent at stream start.

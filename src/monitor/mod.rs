@@ -50,8 +50,10 @@ impl TokenMonitor {
     pub fn record_non_streaming(&self, input_tokens: u64, output_tokens: u64) {
         self.requests_total.fetch_add(1, Ordering::Relaxed);
         self.requests_non_streaming.fetch_add(1, Ordering::Relaxed);
-        self.input_tokens_total.fetch_add(input_tokens, Ordering::Relaxed);
-        self.output_tokens_total.fetch_add(output_tokens, Ordering::Relaxed);
+        self.input_tokens_total
+            .fetch_add(input_tokens, Ordering::Relaxed);
+        self.output_tokens_total
+            .fetch_add(output_tokens, Ordering::Relaxed);
     }
 
     /// Record a successful streaming request.
@@ -59,23 +61,28 @@ impl TokenMonitor {
     pub fn record_streaming_start(&self, input_tokens: u64) {
         self.requests_total.fetch_add(1, Ordering::Relaxed);
         self.requests_streaming.fetch_add(1, Ordering::Relaxed);
-        self.input_tokens_total.fetch_add(input_tokens, Ordering::Relaxed);
+        self.input_tokens_total
+            .fetch_add(input_tokens, Ordering::Relaxed);
     }
 
     /// Add output tokens for a streaming request (extracted from `message_delta`).
     pub fn record_streaming_output(&self, output_tokens: u64) {
-        self.output_tokens_total.fetch_add(output_tokens, Ordering::Relaxed);
+        self.output_tokens_total
+            .fetch_add(output_tokens, Ordering::Relaxed);
     }
 
     /// Add cache tokens.
     pub fn record_cache_tokens(&self, cache_read: u64, cache_creation: u64) {
-        self.cache_read_tokens.fetch_add(cache_read, Ordering::Relaxed);
-        self.cache_creation_tokens.fetch_add(cache_creation, Ordering::Relaxed);
+        self.cache_read_tokens
+            .fetch_add(cache_read, Ordering::Relaxed);
+        self.cache_creation_tokens
+            .fetch_add(cache_creation, Ordering::Relaxed);
     }
 
     /// Record request latency in ms.
     pub fn record_latency(&self, latency_ms: u64) {
-        self.latency_total_ms.fetch_add(latency_ms, Ordering::Relaxed);
+        self.latency_total_ms
+            .fetch_add(latency_ms, Ordering::Relaxed);
     }
 
     /// Record a failed request.
@@ -106,8 +113,14 @@ impl TokenMonitor {
             Some(u) => u,
             None => return (0, 0),
         };
-        let read = usage.get("cache_read_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-        let creation = usage.get("cache_creation_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+        let read = usage
+            .get("cache_read_input_tokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let creation = usage
+            .get("cache_creation_input_tokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
         (read, creation)
     }
 
@@ -123,9 +136,7 @@ impl TokenMonitor {
     /// Try to extract output_tokens from an SSE `message_delta` data line.
     pub fn parse_sse_message_delta(line: &str) -> Option<u64> {
         let json: serde_json::Value = serde_json::from_str(line).ok()?;
-        json.get("usage")?
-            .get("output_tokens")?
-            .as_u64()
+        json.get("usage")?.get("output_tokens")?.as_u64()
     }
 
     /// Build a usage snapshot for `/v1/usage`.
