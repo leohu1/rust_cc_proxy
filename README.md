@@ -22,10 +22,24 @@ A modular, extensible Claude Code proxy server in Rust (actix-web). Features mul
 - Rust 1.80+ (edition 2021)
 - A DeepSeek API key (or Anthropic key for passthrough)
 
-### Build
+### One-Line Install
 
 ```bash
-cargo build --release
+# Linux / macOS
+curl -fsSL https://raw.githubusercontent.com/leohu1/rust_cc_proxy/master/install.sh | bash
+
+# Windows (PowerShell as Administrator)
+iwr -Uri https://raw.githubusercontent.com/leohu1/rust_cc_proxy/master/install.ps1 -OutFile install.ps1
+powershell -ExecutionPolicy Bypass -File install.ps1
+```
+
+### Build from Source
+
+```bash
+git clone https://github.com/leohu1/rust_cc_proxy.git
+cd rust_cc_proxy
+cargo build --release                       # proxy only
+cargo build -p headroom-ffi --release        # optional compression DLL
 ```
 
 ### Run
