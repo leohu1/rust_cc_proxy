@@ -1,0 +1,6 @@
+/target
+/.git
+/.idea
+*.md
+*.ps1
+tests/
