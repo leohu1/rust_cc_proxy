@@ -1,3 +1,7 @@
+[workspace]
+resolver = "2"
+members = ["headroom-ffi"]
+
 [package]
 name = "rust_cc_proxy"
 version = "0.1.0"
