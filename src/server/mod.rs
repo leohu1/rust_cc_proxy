@@ -34,7 +34,7 @@ pub async fn run(config: Config) -> std::io::Result<()> {
         config.upstream.timeout_secs,
         config.upstream.pool_max_connections,
     )
-    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    .map_err(|e| std::io::Error::other(e.to_string()))?;
 
     // Build provider registry — auto-select default: DeepSeek if configured, else Anthropic
     let default_kind = if config.providers.contains_key("deepseek") {

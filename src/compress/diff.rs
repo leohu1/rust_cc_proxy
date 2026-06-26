@@ -17,6 +17,12 @@ pub struct DiffCompressor {
     min_lines_for_ccr: usize,
 }
 
+impl Default for DiffCompressor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DiffCompressor {
     pub fn new() -> Self {
         DiffCompressor {
@@ -223,7 +229,7 @@ fn parse_hunk_header(line: &str) -> Hunk {
     let mut section = String::new();
 
     if let Some(inner) = line.strip_prefix("@@").and_then(|s| s.split("@@").next()) {
-        let parts: Vec<&str> = inner.trim().split_whitespace().collect();
+        let parts: Vec<&str> = inner.split_whitespace().collect();
         if parts.len() >= 2 {
             if let Some(olds) = parts[0].strip_prefix('-') {
                 let op: Vec<&str> = olds.split(',').collect();

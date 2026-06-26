@@ -67,9 +67,10 @@ pub async fn models_handler(state: web::Data<AppState>) -> HttpResponse {
 /// Ref: https://api-docs.deepseek.com/api/get-user-balance
 pub async fn balance_handler(state: web::Data<AppState>) -> HttpResponse {
     // DeepSeek real balance: GET https://api.deepseek.com/user/balance (fixed URL)
-    if let Some(_) = state
+    if state
         .provider_registry
         .get(&crate::providers::ProviderKind::DeepSeek)
+        .is_some()
     {
         let api_key = state
             .config

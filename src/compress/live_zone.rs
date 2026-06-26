@@ -129,25 +129,23 @@ pub fn operate(body_bytes: &[u8], compressor: &Compressor) -> SurgeryReport {
             continue;
         };
 
-        match compressor.compress_string(text) {
-            Ok(CompressionResult::Compressed {
-                replacement,
-                original_bytes,
-                compressed_bytes: cb,
-                ..
-            }) => {
-                bytes_saved += original_bytes as u64 - cb as u64;
-                compressed_count += 1;
-                match block.get_mut("content") {
-                    Some(Value::String(s)) => *s = replacement,
-                    Some(Value::Array(a)) => {
-                        *a = vec![serde_json::json!({"type":"text","text":replacement})]
-                    }
-                    _ => {}
+        if let Ok(CompressionResult::Compressed {
+            replacement,
+            original_bytes,
+            compressed_bytes: cb,
+            ..
+        }) = compressor.compress_string(text)
+        {
+            bytes_saved += original_bytes as u64 - cb as u64;
+            compressed_count += 1;
+            match block.get_mut("content") {
+                Some(Value::String(s)) => *s = replacement,
+                Some(Value::Array(a)) => {
+                    *a = vec![serde_json::json!({"type":"text","text":replacement})]
                 }
-                tracing::debug!("Live-zone: {original_bytes}→{cb} bytes");
+                _ => {}
             }
-            _ => {}
+            tracing::debug!("Live-zone: {original_bytes}→{cb} bytes");
         }
     }
 

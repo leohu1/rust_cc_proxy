@@ -33,7 +33,7 @@ pub fn frozen_message_count(messages: &[Value]) -> usize {
     let mut count = 0;
     for msg in messages {
         let has_cache = match msg.get("content") {
-            Some(Value::Array(blocks)) => blocks.iter().any(|b| has_cache_control(b)),
+            Some(Value::Array(blocks)) => blocks.iter().any(has_cache_control),
             _ => false,
         };
         if has_cache {

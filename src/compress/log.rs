@@ -14,6 +14,12 @@ pub struct LogCompressor {
     min_lines_for_ccr: usize,
 }
 
+impl Default for LogCompressor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LogCompressor {
     pub fn new() -> Self {
         LogCompressor {

@@ -131,12 +131,13 @@ pub fn select_top_by_relevance(
         selected_indices.insert(*idx);
     }
 
-    let mut result: Vec<(usize, serde_json::Value)> = Vec::new();
-    for i in 0..total {
-        if selected_indices.contains(&i) {
-            result.push((i, items[i].clone()));
-        }
-    }
+    let mut result: Vec<(usize, serde_json::Value)> = items
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| selected_indices.contains(i))
+        .map(|(i, v)| (i, v.clone()))
+        .collect();
+    result.sort_by_key(|(i, _)| *i);
     result
 }
 

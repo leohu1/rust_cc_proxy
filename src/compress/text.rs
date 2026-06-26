@@ -12,6 +12,12 @@ pub struct TextCompressor {
     target_ratio: f64,
 }
 
+impl Default for TextCompressor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TextCompressor {
     pub fn new() -> Self {
         TextCompressor {

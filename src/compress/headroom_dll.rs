@@ -4,7 +4,7 @@
 //! dlopen/dlsym on Unix) — no `libloading` crate needed.
 
 use std::ffi::{c_char, CStr};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::compress::CompressionResult;
 
@@ -67,7 +67,7 @@ impl HeadroomDll {
 // ── Platform DLL loading ──────────────────────────────────────────
 
 #[cfg(windows)]
-fn load_platform_dll(path: &PathBuf) -> Option<HeadroomDll> {
+fn load_platform_dll(path: &Path) -> Option<HeadroomDll> {
     use std::os::windows::ffi::OsStrExt;
     let wide: Vec<u16> = path
         .as_os_str()
@@ -110,7 +110,7 @@ extern "system" {
 }
 
 #[cfg(not(windows))]
-fn load_platform_dll(path: &PathBuf) -> Option<HeadroomDll> {
+fn load_platform_dll(path: &Path) -> Option<HeadroomDll> {
     use std::ffi::CString;
     let c_path = CString::new(path.to_string_lossy().as_bytes()).ok()?;
     let handle = unsafe { libc::dlopen(c_path.as_ptr(), libc::RTLD_NOW) };
