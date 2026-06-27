@@ -69,9 +69,7 @@ pub fn diff_noise_strip(content: &str) -> Option<String> {
             } else {
                 removed_anything = true;
             }
-        } else if current_file_is_noise
-            && (line.starts_with("--- ") || line.starts_with("+++ "))
-        {
+        } else if current_file_is_noise && (line.starts_with("--- ") || line.starts_with("+++ ")) {
             // Skip lockfile header lines
             removed_anything = true;
         } else if current_file_is_noise {
@@ -195,7 +193,10 @@ mod tests {
         }"#;
         let compact = json_minify(pretty).unwrap();
         assert!(compact.len() < pretty.len());
-        assert!(!compact.contains("  "), "compact JSON should have minimal whitespace");
+        assert!(
+            !compact.contains("  "),
+            "compact JSON should have minimal whitespace"
+        );
         // Should still be valid JSON
         assert!(serde_json::from_str::<Value>(&compact).is_ok());
     }
@@ -210,7 +211,10 @@ mod tests {
     fn test_diff_noise_strip_lockfile() {
         let diff = "diff --git a/Cargo.lock b/Cargo.lock\n--- a/Cargo.lock\n+++ b/Cargo.lock\n@@ -1,3 +1,3 @@\n-old\n+new\ndiff --git a/src/main.rs b/src/main.rs\n--- a/src/main.rs\n+++ b/src/main.rs\n@@ -10,3 +10,3 @@\n-old code\n+new code\n";
         let cleaned = diff_noise_strip(diff).unwrap();
-        assert!(!cleaned.contains("Cargo.lock"), "lockfile should be stripped");
+        assert!(
+            !cleaned.contains("Cargo.lock"),
+            "lockfile should be stripped"
+        );
         assert!(cleaned.contains("src/main.rs"), "real files should be kept");
     }
 

@@ -31,7 +31,14 @@ impl std::fmt::Debug for Tokenizer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Tokenizer")
             .field("backend", &self.backend)
-            .field("bpe", &if self.bpe.is_some() { "Some(CoreBPE)" } else { "None" })
+            .field(
+                "bpe",
+                &if self.bpe.is_some() {
+                    "Some(CoreBPE)"
+                } else {
+                    "None"
+                },
+            )
             .finish()
     }
 }
@@ -39,24 +46,22 @@ impl std::fmt::Debug for Tokenizer {
 impl Tokenizer {
     /// Get the global tokenizer instance, initializing it on first call.
     pub fn get() -> &'static Tokenizer {
-        TOKENIZER.get_or_init(|| {
-            match tiktoken_rs::o200k_base() {
-                Ok(bpe) => {
-                    tracing::info!("Tokenizer: tiktoken-rs o200k_base loaded successfully");
-                    Tokenizer {
-                        backend: Backend::Tiktoken,
-                        bpe: Some(bpe),
-                    }
+        TOKENIZER.get_or_init(|| match tiktoken_rs::o200k_base() {
+            Ok(bpe) => {
+                tracing::info!("Tokenizer: tiktoken-rs o200k_base loaded successfully");
+                Tokenizer {
+                    backend: Backend::Tiktoken,
+                    bpe: Some(bpe),
                 }
-                Err(e) => {
-                    tracing::warn!(
-                        "Tokenizer: tiktoken-rs failed to load o200k_base ({e}), \
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Tokenizer: tiktoken-rs failed to load o200k_base ({e}), \
                          falling back to character-based estimation"
-                    );
-                    Tokenizer {
-                        backend: Backend::Estimating,
-                        bpe: None,
-                    }
+                );
+                Tokenizer {
+                    backend: Backend::Estimating,
+                    bpe: None,
                 }
             }
         })

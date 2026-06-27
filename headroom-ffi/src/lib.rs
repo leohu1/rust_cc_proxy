@@ -365,7 +365,11 @@ fn compress_search(input: &str) -> String {
             kept += 1;
         }
         if matches.len() > take {
-            compressed.push_str(&format!("{}: … and {} more matches …\n", file, matches.len() - take));
+            compressed.push_str(&format!(
+                "{}: … and {} more matches …\n",
+                file,
+                matches.len() - take
+            ));
         }
     }
 

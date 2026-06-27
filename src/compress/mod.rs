@@ -63,7 +63,11 @@ pub struct Compressor {
 }
 
 impl Compressor {
-    pub fn new(min_bytes: usize, max_array_items: usize, ccr_config: crate::config::CcrConfig) -> Self {
+    pub fn new(
+        min_bytes: usize,
+        max_array_items: usize,
+        ccr_config: crate::config::CcrConfig,
+    ) -> Self {
         let dll = headroom_dll::HeadroomDll::load();
         if dll.is_some() {
             tracing::info!("Headroom DLL compression ENABLED");
@@ -72,9 +76,16 @@ impl Compressor {
         let ccr_store = match ccr_config.backend.as_str() {
             "sqlite" => {
                 let path = ccr_config.sqlite_path.as_deref().unwrap_or("ccr.db");
-                match CcrStore::with_sqlite(path, ccr_config.ttl_seconds, ccr_config.purge_interval_secs) {
+                match CcrStore::with_sqlite(
+                    path,
+                    ccr_config.ttl_seconds,
+                    ccr_config.purge_interval_secs,
+                ) {
                     Ok(store) => {
-                        tracing::info!("CCR: SQLite backend at {path} (TTL={}s)", ccr_config.ttl_seconds);
+                        tracing::info!(
+                            "CCR: SQLite backend at {path} (TTL={}s)",
+                            ccr_config.ttl_seconds
+                        );
                         store
                     }
                     Err(e) => {
@@ -177,9 +188,13 @@ impl Compressor {
                 match content_type {
                     ContentType::JsonArray => self.compress_json_array_str(content_ref),
                     ContentType::JsonObject => self.compress_json_object_str(content_ref),
-                    ContentType::Diff => self.diff_compressor.compress(content_ref, &self.ccr_store),
+                    ContentType::Diff => {
+                        self.diff_compressor.compress(content_ref, &self.ccr_store)
+                    }
                     ContentType::Log => self.log_compressor.compress(content_ref, &self.ccr_store),
-                    ContentType::SearchResults => self.search_compressor.compress(content_ref, &self.ccr_store),
+                    ContentType::SearchResults => self
+                        .search_compressor
+                        .compress(content_ref, &self.ccr_store),
                     ContentType::PlainText => {
                         self.text_compressor.compress(content_ref, &self.ccr_store)
                     }
@@ -239,23 +254,25 @@ impl Compressor {
         let scores = self.bm25.score_items(&item_refs, &query);
 
         // Adaptive sizing: how many to keep?
-        let optimal_k = adaptive_sizer::compute_optimal_k(
-            &item_refs, 1.0, 3, Some(self.max_array_items),
-        );
+        let optimal_k =
+            adaptive_sizer::compute_optimal_k(&item_refs, 1.0, 3, Some(self.max_array_items));
 
         // Anchor selection: guaranteed positions
         let anchor_selector = anchor_selector::AnchorSelector::default();
         let anchors = anchor_selector.select_anchors(
-            total, optimal_k, anchor_selector::DataPattern::Generic, Some(&scores),
+            total,
+            optimal_k,
+            anchor_selector::DataPattern::Generic,
+            Some(&scores),
         );
 
         // Fill remaining slots with top-scored items (excluding anchors)
         let remaining_slots = optimal_k.saturating_sub(anchors.len());
-        let mut fill_indices: Vec<usize> = (0..total)
-            .filter(|i| !anchors.contains(i))
-            .collect();
+        let mut fill_indices: Vec<usize> = (0..total).filter(|i| !anchors.contains(i)).collect();
         fill_indices.sort_by(|a, b| {
-            scores[*b].partial_cmp(&scores[*a]).unwrap_or(std::cmp::Ordering::Equal)
+            scores[*b]
+                .partial_cmp(&scores[*a])
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
         let mut selected: std::collections::BTreeSet<usize> = anchors.clone();
         for idx in fill_indices.iter().take(remaining_slots) {
@@ -590,7 +607,8 @@ mod tests {
     #[test]
     fn test_detect_search_not_false_positive() {
         // Regular prose with colons shouldn't be misdetected as search
-        let content = "This is: a sentence. Another: one here.\nMore text: yes.\nLine 4: ok.\nLine 5";
+        let content =
+            "This is: a sentence. Another: one here.\nMore text: yes.\nLine 4: ok.\nLine 5";
         assert_eq!(detect_content_type(content), ContentType::Unknown);
     }
 

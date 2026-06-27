@@ -94,7 +94,9 @@ impl CcrStore {
         // Background purge task — only if interval > 0 and TTL > 0
         if purge_interval_secs > 0 && ttl_seconds > 0 {
             let backend = SqliteBackend::open(path, ttl_seconds).map_err(|e| {
-                AppError::ConfigError(format!("failed to open CCR SQLite store for purge task: {e}"))
+                AppError::ConfigError(format!(
+                    "failed to open CCR SQLite store for purge task: {e}"
+                ))
             })?;
             let purged_clone = purged.clone();
             tokio::spawn(async move {

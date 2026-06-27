@@ -18,10 +18,7 @@
 
 use std::sync::OnceLock;
 
-use prometheus::{
-    Counter, Encoder, Gauge, Histogram, HistogramOpts, Opts, Registry,
-    TextEncoder,
-};
+use prometheus::{Counter, Encoder, Gauge, Histogram, HistogramOpts, Opts, Registry, TextEncoder};
 
 // ── Registry ───────────────────────────────────────────────────────
 
@@ -119,7 +116,10 @@ fn errors_total() -> &'static Counter {
 
 #[inline]
 fn compression_bytes_gauge() -> &'static Gauge {
-    lazy_gauge!("cc_proxy_compression_bytes", "Compression savings (original - compressed)")
+    lazy_gauge!(
+        "cc_proxy_compression_bytes",
+        "Compression savings (original - compressed)"
+    )
 }
 
 #[inline]

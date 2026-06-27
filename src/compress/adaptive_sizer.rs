@@ -21,12 +21,7 @@
 /// - `bias`: multiplier on the knee point (1.0 = unbiased, >1.0 keeps more).
 /// - `min_k`: floor — never keep fewer than this.
 /// - `max_k`: ceiling — never keep more than this. If `None`, uses `items.len()`.
-pub fn compute_optimal_k(
-    items: &[&str],
-    bias: f64,
-    min_k: usize,
-    max_k: Option<usize>,
-) -> usize {
+pub fn compute_optimal_k(items: &[&str], bias: f64, min_k: usize, max_k: Option<usize>) -> usize {
     let n = items.len();
     if n == 0 {
         return 0;

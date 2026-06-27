@@ -70,11 +70,7 @@ impl SearchCompressor {
 
     /// Compress search results. Returns `Unchanged` if content is too
     /// small or doesn't parse as search output.
-    pub fn compress(
-        &self,
-        content: &str,
-        ccr_store: &CcrStore,
-    ) -> CompressionResult {
+    pub fn compress(&self, content: &str, ccr_store: &CcrStore) -> CompressionResult {
         if content.len() < self.min_chars {
             return CompressionResult::Unchanged;
         }
@@ -120,11 +116,14 @@ impl SearchCompressor {
             ccr_hash,
             compressed,
             if !summaries.is_empty() {
-                format!("\n/* File summaries: {} */",
-                    summaries.iter()
+                format!(
+                    "\n/* File summaries: {} */",
+                    summaries
+                        .iter()
                         .map(|(f, s)| format!("{f}: {s}"))
                         .collect::<Vec<_>>()
-                        .join("; "))
+                        .join("; ")
+                )
             } else {
                 String::new()
             },
@@ -200,10 +199,8 @@ impl SearchCompressor {
             .flat_map(|fm| fm.matches.iter().map(|m| m.content.clone()))
             .collect();
         let match_refs: Vec<&str> = all_match_strs.iter().map(|s| s.as_str()).collect();
-        let adaptive_total = adaptive_sizer::compute_optimal_k(
-            &match_refs, 1.0, 5,
-            Some(self.max_total_matches),
-        );
+        let adaptive_total =
+            adaptive_sizer::compute_optimal_k(&match_refs, 1.0, 5, Some(self.max_total_matches));
 
         // Within each file, select top matches
         let mut result: Vec<FileMatches> = Vec::new();
@@ -230,7 +227,10 @@ impl SearchCompressor {
             // Always keep first if configured
             if self.always_keep_first && take >= 2 && total > take {
                 if let Some(first) = fm.matches.first() {
-                    if !selected_matches.iter().any(|s| s.line_number == first.line_number) {
+                    if !selected_matches
+                        .iter()
+                        .any(|s| s.line_number == first.line_number)
+                    {
                         selected_matches.push(first.clone());
                     }
                 }
@@ -241,7 +241,10 @@ impl SearchCompressor {
                 if selected_matches.len() >= take {
                     break;
                 }
-                if selected_matches.iter().any(|s| s.line_number == m.line_number) {
+                if selected_matches
+                    .iter()
+                    .any(|s| s.line_number == m.line_number)
+                {
                     continue;
                 }
                 selected_matches.push((*m).clone());
@@ -296,7 +299,8 @@ impl SearchCompressor {
         original: &[FileMatches],
     ) -> (String, std::collections::BTreeMap<String, String>) {
         let mut output = String::new();
-        let mut summaries: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+        let mut summaries: std::collections::BTreeMap<String, String> =
+            std::collections::BTreeMap::new();
 
         // Build a lookup from file name to original match count
         let orig_counts: std::collections::BTreeMap<&str, usize> = original
@@ -305,7 +309,10 @@ impl SearchCompressor {
             .collect();
 
         for fm in selected {
-            let orig_count = orig_counts.get(fm.file.as_str()).copied().unwrap_or(fm.matches.len());
+            let orig_count = orig_counts
+                .get(fm.file.as_str())
+                .copied()
+                .unwrap_or(fm.matches.len());
             let omitted = orig_count.saturating_sub(fm.matches.len());
 
             if omitted > 0 {
@@ -316,17 +323,11 @@ impl SearchCompressor {
             }
 
             for m in &fm.matches {
-                output.push_str(&format!(
-                    "{}:{}:{}\n",
-                    fm.file, m.line_number, m.content
-                ));
+                output.push_str(&format!("{}:{}:{}\n", fm.file, m.line_number, m.content));
             }
 
             if omitted > 0 {
-                output.push_str(&format!(
-                    "{}: … and {} more matches …\n",
-                    fm.file, omitted
-                ));
+                output.push_str(&format!("{}: … and {} more matches …\n", fm.file, omitted));
             }
         }
 
@@ -540,19 +541,13 @@ mod tests {
                     compressed_bytes < original_bytes,
                     "compressed ({compressed_bytes}) < original ({original_bytes})"
                 );
-                assert!(
-                    replacement.contains("<<ccr:"),
-                    "should contain CCR marker"
-                );
+                assert!(replacement.contains("<<ccr:"), "should contain CCR marker");
                 assert!(
                     replacement.contains("Search:"),
                     "should contain search header"
                 );
                 // Error lines should be preserved
-                assert!(
-                    replacement.contains("ERROR"),
-                    "should preserve error lines"
-                );
+                assert!(replacement.contains("ERROR"), "should preserve error lines");
             }
             other => panic!("expected Compressed, got {other:?}"),
         }
@@ -588,10 +583,7 @@ mod tests {
                     .count();
                 // With max_total_matches=30, we should have ~30 actual matches
                 // (allow a small margin for always_keep_first/last overfill)
-                assert!(
-                    match_lines <= 35,
-                    "should cap matches, got {match_lines}"
-                );
+                assert!(match_lines <= 35, "should cap matches, got {match_lines}");
             }
             _ => {}
         }

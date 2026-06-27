@@ -227,7 +227,10 @@ mod tests {
     fn test_score_warning_line() {
         // warning keywords → signals priority 0.6 → base 60
         let score = score_line("warning: unused import", &LogFormat::Generic);
-        assert!(score >= 50, "warning lines should score moderately, got {score}");
+        assert!(
+            score >= 50,
+            "warning lines should score moderately, got {score}"
+        );
     }
 
     #[test]

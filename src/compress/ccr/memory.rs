@@ -107,7 +107,10 @@ mod tests {
         // Access "a" — makes it recently used
         let _ = backend.get("a");
         backend.put("d", b"4"); // evicts "b" (now oldest)
-        assert!(backend.get("a").is_some(), "'a' was accessed and should survive");
+        assert!(
+            backend.get("a").is_some(),
+            "'a' was accessed and should survive"
+        );
         assert!(backend.get("b").is_none(), "'b' should be evicted");
     }
 

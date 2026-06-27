@@ -148,7 +148,9 @@ impl Config {
                 .ok()
                 .filter(|s| !s.is_empty()),
             ttl_seconds: env_or("CCR_TTL_SECONDS", "1800").parse().unwrap_or(1800),
-            purge_interval_secs: env_or("CCR_PURGE_INTERVAL_SECONDS", "300").parse().unwrap_or(300),
+            purge_interval_secs: env_or("CCR_PURGE_INTERVAL_SECONDS", "300")
+                .parse()
+                .unwrap_or(300),
         };
 
         // Auth: parse comma-separated API tokens from PROXY_AUTH_TOKENS
@@ -166,10 +168,7 @@ impl Config {
             tokens: auth_tokens,
         };
         if auth.is_enabled() {
-            tracing::info!(
-                "Auth ENABLED ({} token(s) configured)",
-                auth.tokens.len()
-            );
+            tracing::info!("Auth ENABLED ({} token(s) configured)", auth.tokens.len());
         }
 
         let dev_mode = std::env::var("PROXY_DEV_MODE")

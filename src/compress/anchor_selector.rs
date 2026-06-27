@@ -120,8 +120,7 @@ impl AnchorSelector {
         let weights = RegionWeights::for_pattern(pattern);
 
         // Compute anchor budget
-        let budget = ((max_items as f64) * self.config.anchor_budget_pct)
-            .ceil() as usize;
+        let budget = ((max_items as f64) * self.config.anchor_budget_pct).ceil() as usize;
         let budget = budget
             .max(self.config.min_anchor_slots)
             .min(self.config.max_anchor_slots)
@@ -163,13 +162,7 @@ impl AnchorSelector {
     }
 
     /// Pick `n` evenly-spaced indices from [start, end).
-    fn pick_region(
-        &self,
-        selected: &mut BTreeSet<usize>,
-        start: usize,
-        end: usize,
-        n: usize,
-    ) {
+    fn pick_region(&self, selected: &mut BTreeSet<usize>, start: usize, end: usize, n: usize) {
         let range = end.saturating_sub(start);
         if range == 0 || n == 0 {
             return;
@@ -233,7 +226,7 @@ mod tests {
         // Should have anchors in all three regions
         assert!(!anchors.is_empty());
         assert!(anchors.len() <= 12); // max_anchor_slots
-        // Front should have more slots: at least index 0
+                                      // Front should have more slots: at least index 0
         assert!(anchors.contains(&0));
         // Back should have the last index
         assert!(anchors.contains(&99));
@@ -261,13 +254,13 @@ mod tests {
     #[test]
     fn test_with_scores() {
         let selector = AnchorSelector::default();
-        let scores: Vec<f64> = (0..50)
-            .map(|i| if i == 25 { 1.0 } else { 0.1 })
-            .collect();
-        let anchors =
-            selector.select_anchors(50, 20, DataPattern::Generic, Some(&scores));
+        let scores: Vec<f64> = (0..50).map(|i| if i == 25 { 1.0 } else { 0.1 }).collect();
+        let anchors = selector.select_anchors(50, 20, DataPattern::Generic, Some(&scores));
         // The high-scoring index 25 should be selected in the middle region
-        assert!(anchors.contains(&25), "high-scored item 25 should be an anchor");
+        assert!(
+            anchors.contains(&25),
+            "high-scored item 25 should be an anchor"
+        );
     }
 
     #[test]

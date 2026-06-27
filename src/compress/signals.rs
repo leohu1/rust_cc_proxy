@@ -94,28 +94,90 @@ impl KeywordRegistry {
     pub fn default_set() -> Self {
         KeywordRegistry {
             error: vec![
-                "error", "fail", "fatal", "panic", "panicked", "crash", "exception",
-                "timeout", "refused", "denied", "abort", "killed",
-                "segfault", "corrupt", "invalid", "missing", "unknown",
-                "unsupported", "unreachable", "overflow", "deadlock",
+                "error",
+                "fail",
+                "fatal",
+                "panic",
+                "panicked",
+                "crash",
+                "exception",
+                "timeout",
+                "refused",
+                "denied",
+                "abort",
+                "killed",
+                "segfault",
+                "corrupt",
+                "invalid",
+                "missing",
+                "unknown",
+                "unsupported",
+                "unreachable",
+                "overflow",
+                "deadlock",
             ],
             warning: vec![
-                "warn", "warning", "deprecated", "obsolete", "todo",
-                "fixme", "hack", "workaround", "unstable", "experimental",
-                "slow", "timeout", "retry", "fallback",
+                "warn",
+                "warning",
+                "deprecated",
+                "obsolete",
+                "todo",
+                "fixme",
+                "hack",
+                "workaround",
+                "unstable",
+                "experimental",
+                "slow",
+                "timeout",
+                "retry",
+                "fallback",
             ],
             importance: vec![
-                "critical", "security", "vuln", "cve", "exploit",
-                "injection", "xss", "csrf", "auth", "password",
-                "secret", "token", "key", "certificate",
-                "fn", "def", "class", "impl", "struct", "trait",
-                "pub", "mod", "use", "import", "export",
+                "critical",
+                "security",
+                "vuln",
+                "cve",
+                "exploit",
+                "injection",
+                "xss",
+                "csrf",
+                "auth",
+                "password",
+                "secret",
+                "token",
+                "key",
+                "certificate",
+                "fn",
+                "def",
+                "class",
+                "impl",
+                "struct",
+                "trait",
+                "pub",
+                "mod",
+                "use",
+                "import",
+                "export",
             ],
             security: vec![
-                "password", "secret", "token", "api_key", "private_key",
-                "credential", "auth_token", "bearer", "access_key",
-                "sql_inject", "xss", "csrf", "ssrf", "rce", "lfi",
-                "hardcoded", "plaintext", "cleartext",
+                "password",
+                "secret",
+                "token",
+                "api_key",
+                "private_key",
+                "credential",
+                "auth_token",
+                "bearer",
+                "access_key",
+                "sql_inject",
+                "xss",
+                "csrf",
+                "ssrf",
+                "rce",
+                "lfi",
+                "hardcoded",
+                "plaintext",
+                "cleartext",
             ],
         }
     }
@@ -177,10 +239,7 @@ impl KeywordDetector {
     /// Substring-only, no word-boundary check.
     pub fn contains_error_indicator(&self, text: &str) -> bool {
         let lower = text.to_lowercase();
-        self.registry
-            .error
-            .iter()
-            .any(|kw| lower.contains(*kw))
+        self.registry.error.iter().any(|kw| lower.contains(*kw))
     }
 }
 
@@ -315,10 +374,7 @@ mod tests {
 
     #[test]
     fn test_security_in_diff() {
-        let signal = KeywordDetector::new().score(
-            "-password: admin123",
-            ImportanceContext::Diff,
-        );
+        let signal = KeywordDetector::new().score("-password: admin123", ImportanceContext::Diff);
         // "password" is in the security keyword list which fires in Diff
         assert!(signal.is_match());
     }
