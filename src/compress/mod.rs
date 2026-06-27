@@ -1,3 +1,5 @@
+pub mod adaptive_sizer;
+pub mod anchor_selector;
 pub mod cache_aware;
 pub mod ccr;
 pub mod diff;
@@ -5,8 +7,12 @@ pub mod headroom_dll;
 pub mod live_zone;
 pub mod log;
 pub mod pipeline_stage;
+pub mod pipeline_utils;
 pub mod relevance;
+pub mod search;
+pub mod signals;
 pub mod text;
+pub mod tokenizer;
 
 use crate::error::AppError;
 use ccr::CcrStore;
@@ -51,23 +57,46 @@ pub struct Compressor {
     diff_compressor: diff::DiffCompressor,
     log_compressor: log::LogCompressor,
     text_compressor: text::TextCompressor,
+    search_compressor: search::SearchCompressor,
     bm25: relevance::BM25Scorer,
     headroom_dll: Option<headroom_dll::HeadroomDll>,
 }
 
 impl Compressor {
-    pub fn new(min_bytes: usize, max_array_items: usize) -> Self {
+    pub fn new(min_bytes: usize, max_array_items: usize, ccr_config: crate::config::CcrConfig) -> Self {
         let dll = headroom_dll::HeadroomDll::load();
         if dll.is_some() {
             tracing::info!("Headroom DLL compression ENABLED");
         }
+
+        let ccr_store = match ccr_config.backend.as_str() {
+            "sqlite" => {
+                let path = ccr_config.sqlite_path.as_deref().unwrap_or("ccr.db");
+                match CcrStore::with_sqlite(path, ccr_config.ttl_seconds, ccr_config.purge_interval_secs) {
+                    Ok(store) => {
+                        tracing::info!("CCR: SQLite backend at {path} (TTL={}s)", ccr_config.ttl_seconds);
+                        store
+                    }
+                    Err(e) => {
+                        tracing::warn!("CCR: SQLite open failed ({e}), falling back to InMemory");
+                        CcrStore::new(10_000)
+                    }
+                }
+            }
+            _ => {
+                tracing::info!("CCR: InMemory backend (capacity=10000)");
+                CcrStore::new(10_000)
+            }
+        };
+
         Compressor {
-            ccr_store: std::sync::Arc::new(CcrStore::new(10_000)),
+            ccr_store: std::sync::Arc::new(ccr_store),
             min_bytes,
             max_array_items,
             diff_compressor: diff::DiffCompressor::new(),
             log_compressor: log::LogCompressor::new(),
             text_compressor: text::TextCompressor::new(),
+            search_compressor: search::SearchCompressor::new(),
             bm25: relevance::BM25Scorer::default(),
             headroom_dll: dll,
         }
@@ -89,6 +118,7 @@ impl Compressor {
             diff_compressor: diff::DiffCompressor::new(),
             log_compressor: log::LogCompressor::new(),
             text_compressor: text::TextCompressor::new(),
+            search_compressor: search::SearchCompressor::new(),
             bm25: relevance::BM25Scorer::default(),
             headroom_dll: None,
         }
@@ -107,19 +137,34 @@ impl Compressor {
             return Ok(CompressionResult::Unchanged);
         }
 
-        let original_tokens = estimate_tokens(content);
+        // ── Pre-compression reformat (lossless) ─────────────────
+        // Try minifying/stripping noise before running the compressor.
+        // These are cheap, lossless, and make the compressor's job easier.
+        let content_owned: String;
+        let content_ref: &str = if let Some(minified) = pipeline_utils::json_minify(content) {
+            content_owned = minified;
+            &content_owned
+        } else if let Some(cleaned) = pipeline_utils::diff_noise_strip(content) {
+            content_owned = cleaned;
+            &content_owned
+        } else {
+            content
+        };
+
+        let original_tokens = tokenizer::count_tokens(content_ref);
 
         // Try Headroom DLL first if loaded
         let result = if let Some(ref dll) = self.headroom_dll {
-            let content_type = detect_content_type(content);
+            let content_type = detect_content_type(content_ref);
             let type_code: u8 = match content_type {
                 ContentType::JsonArray | ContentType::JsonObject => 0u8,
                 ContentType::Diff => 1u8,
                 ContentType::Log => 2u8,
                 ContentType::PlainText => 3u8,
+                ContentType::SearchResults => 4u8,
                 ContentType::Unknown => return Ok(CompressionResult::Skipped),
             };
-            dll.compress(content, type_code)
+            dll.compress(content_ref, type_code)
         } else {
             None
         };
@@ -128,14 +173,15 @@ impl Compressor {
             Some(r) => r,
             None => {
                 // Fall back to built-in compressors
-                let content_type = detect_content_type(content);
+                let content_type = detect_content_type(content_ref);
                 match content_type {
-                    ContentType::JsonArray => self.compress_json_array_str(content),
-                    ContentType::JsonObject => self.compress_json_object_str(content),
-                    ContentType::Diff => self.diff_compressor.compress(content, &self.ccr_store),
-                    ContentType::Log => self.log_compressor.compress(content, &self.ccr_store),
+                    ContentType::JsonArray => self.compress_json_array_str(content_ref),
+                    ContentType::JsonObject => self.compress_json_object_str(content_ref),
+                    ContentType::Diff => self.diff_compressor.compress(content_ref, &self.ccr_store),
+                    ContentType::Log => self.log_compressor.compress(content_ref, &self.ccr_store),
+                    ContentType::SearchResults => self.search_compressor.compress(content_ref, &self.ccr_store),
                     ContentType::PlainText => {
-                        self.text_compressor.compress(content, &self.ccr_store)
+                        self.text_compressor.compress(content_ref, &self.ccr_store)
                     }
                     ContentType::Unknown => CompressionResult::Skipped,
                 }
@@ -149,7 +195,7 @@ impl Compressor {
             ref replacement, ..
         } = &result
         {
-            let compressed_tokens = estimate_tokens(replacement);
+            let compressed_tokens = tokenizer::count_tokens(replacement);
             if compressed_tokens >= original_tokens {
                 tracing::debug!(
                     "Tokenizer gate rejected: orig={original_tokens} comp={compressed_tokens} tokens"
@@ -166,7 +212,7 @@ impl Compressor {
         Ok(result)
     }
 
-    /// Compress JSON array string with BM25-based selection.
+    /// Compress JSON array string with adaptive sizing + anchor selection.
     fn compress_json_array_str(&self, content: &str) -> CompressionResult {
         let trimmed = content.trim();
         let parsed: Value = match serde_json::from_str(trimmed) {
@@ -181,7 +227,9 @@ impl Compressor {
             return CompressionResult::Unchanged;
         }
 
-        // Build query context from error items + first/last items
+        let total = items.len();
+
+        // Build query context + BM25 scores
         let query = build_query_context(items);
         let item_strs: Vec<String> = items
             .iter()
@@ -190,31 +238,43 @@ impl Compressor {
         let item_refs: Vec<&str> = item_strs.iter().map(|s| s.as_str()).collect();
         let scores = self.bm25.score_items(&item_refs, &query);
 
-        let total = items.len();
-        let keep_first = self.max_array_items / 3;
-        let keep_last = self.max_array_items / 3;
-
-        let selected = relevance::select_top_by_relevance(
-            items,
-            &scores,
-            self.max_array_items,
-            keep_first,
-            keep_last,
+        // Adaptive sizing: how many to keep?
+        let optimal_k = adaptive_sizer::compute_optimal_k(
+            &item_refs, 1.0, 3, Some(self.max_array_items),
         );
+
+        // Anchor selection: guaranteed positions
+        let anchor_selector = anchor_selector::AnchorSelector::default();
+        let anchors = anchor_selector.select_anchors(
+            total, optimal_k, anchor_selector::DataPattern::Generic, Some(&scores),
+        );
+
+        // Fill remaining slots with top-scored items (excluding anchors)
+        let remaining_slots = optimal_k.saturating_sub(anchors.len());
+        let mut fill_indices: Vec<usize> = (0..total)
+            .filter(|i| !anchors.contains(i))
+            .collect();
+        fill_indices.sort_by(|a, b| {
+            scores[*b].partial_cmp(&scores[*a]).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let mut selected: std::collections::BTreeSet<usize> = anchors.clone();
+        for idx in fill_indices.iter().take(remaining_slots) {
+            selected.insert(*idx);
+        }
 
         // Build compressed array with omission markers
         let mut compressed_items: Vec<Value> = Vec::new();
         let mut expected = 0usize;
         let original_bytes = serde_json::to_string(items).unwrap_or_default().len();
 
-        for (idx, item) in &selected {
-            if *idx > expected {
+        for &idx in &selected {
+            if idx > expected {
                 compressed_items.push(Value::String(format!(
                     "… {} items omitted …",
                     idx - expected
                 )));
             }
-            compressed_items.push(item.clone());
+            compressed_items.push(items[idx].clone());
             expected = idx + 1;
         }
         if expected < total {
@@ -230,7 +290,7 @@ impl Compressor {
             .store(&serde_json::to_string(items).unwrap_or_default());
 
         let full = format!(
-            "/* {}/{} items, {}→{} bytes. <<ccr:{}>> */\n{}",
+            "/* {}/{} items (k={optimal_k}), {}→{} bytes. <<ccr:{}>> */\n{}",
             selected.len(),
             total,
             original_bytes,
@@ -284,8 +344,26 @@ impl Compressor {
     }
 
     /// Return CCR store stats for monitoring.
-    pub fn stats(&self) -> ccr::CcrStats {
-        self.ccr_store.stats()
+    /// Merges built-in CCR stats with DLL stats when available.
+    pub fn stats(&self) -> serde_json::Value {
+        let builtin = self.ccr_store.stats();
+        let mut result = serde_json::json!({
+            "builtin": {
+                "entries": builtin.entries,
+                "max_entries": builtin.max_entries,
+                "total_stored": builtin.total_stored,
+                "hits": builtin.hits,
+                "misses": builtin.misses,
+            },
+        });
+
+        if let Some(ref dll) = self.headroom_dll {
+            if let Some(dll_stats) = dll.ccr_stats() {
+                result["dll"] = dll_stats;
+            }
+        }
+
+        result
     }
 }
 
@@ -297,6 +375,7 @@ enum ContentType {
     JsonObject,
     Diff,
     Log,
+    SearchResults,
     PlainText,
     Unknown,
 }
@@ -319,6 +398,11 @@ fn detect_content_type(content: &str) -> ContentType {
         return ContentType::Diff;
     }
 
+    // Search result detection — check if most lines look like file:line:content
+    if is_search_content(trimmed) {
+        return ContentType::SearchResults;
+    }
+
     // Log detection
     if is_log_content(trimmed) {
         return ContentType::Log;
@@ -330,6 +414,49 @@ fn detect_content_type(content: &str) -> ContentType {
     }
 
     ContentType::Unknown
+}
+
+fn is_search_content(content: &str) -> bool {
+    let lines: Vec<&str> = content.lines().take(50).collect();
+    if lines.len() < 5 {
+        return false;
+    }
+    // Count lines that look like `path:digits:text`
+    let match_like = lines
+        .iter()
+        .filter(|line| {
+            let line = line.trim();
+            if line.is_empty() {
+                return false;
+            }
+            // Check for `file:line:text` or `file:line:col:text` pattern
+            is_match_line_like(line)
+        })
+        .count();
+    // If > 60% of first 50 lines look like match output, classify as search
+    match_like > lines.len() * 3 / 5
+}
+
+/// Quick check: does this line look like `file:line:text`?
+fn is_match_line_like(line: &str) -> bool {
+    let bytes = line.as_bytes();
+    let mut colon_count = 0usize;
+    let mut digit_run_after_colon = false;
+
+    for (i, &b) in bytes.iter().enumerate() {
+        if b == b':' || b == b'-' {
+            colon_count += 1;
+            // Check if what follows is digits
+            let rest = &bytes[i + 1..];
+            if let Some(&first) = rest.first() {
+                if first.is_ascii_digit() {
+                    digit_run_after_colon = true;
+                }
+            }
+        }
+    }
+
+    colon_count >= 2 && digit_run_after_colon
 }
 
 fn is_log_content(content: &str) -> bool {
@@ -432,7 +559,7 @@ mod tests {
 
     #[test]
     fn test_compress_small_unchanged() {
-        let c = Compressor::new(512, 10);
+        let c = Compressor::for_test(512, 10);
         assert!(matches!(
             c.compress_string("hello").unwrap(),
             CompressionResult::Unchanged
@@ -452,12 +579,28 @@ mod tests {
     }
 
     #[test]
+    fn test_detect_search() {
+        let mut content = String::new();
+        for i in 0..20 {
+            content.push_str(&format!("src/main.rs:{i}: some match content here\n"));
+        }
+        assert_eq!(detect_content_type(&content), ContentType::SearchResults);
+    }
+
+    #[test]
+    fn test_detect_search_not_false_positive() {
+        // Regular prose with colons shouldn't be misdetected as search
+        let content = "This is: a sentence. Another: one here.\nMore text: yes.\nLine 4: ok.\nLine 5";
+        assert_eq!(detect_content_type(content), ContentType::Unknown);
+    }
+
+    #[test]
     fn test_compress_json_array_with_bm25() {
         let items: Vec<Value> = (0..100)
             .map(|i| serde_json::json!({"id": i, "name": format!("item-{i}"), "value": i * 10}))
             .collect();
         let json = serde_json::to_string(&items).unwrap();
-        let c = Compressor::new(100, 10);
+        let c = Compressor::for_test(100, 10);
         match c.compress_string(&json).unwrap() {
             CompressionResult::Compressed {
                 compressed_bytes,
@@ -486,7 +629,7 @@ mod tests {
             diff.push_str(&format!("+new line {i}\n"));
             diff.push_str(" more context\n");
         }
-        let c = Compressor::new(512, 10);
+        let c = Compressor::for_test(512, 10);
         match c.compress_string(&diff).unwrap() {
             CompressionResult::Compressed { .. } => {}
             other => panic!("expected Compressed, got {other:?}"),
@@ -505,7 +648,7 @@ mod tests {
                 log.push_str(&format!("ERROR: failure at item {i}\n"));
             }
         }
-        let c = Compressor::new(512, 10);
+        let c = Compressor::for_test(512, 10);
         match c.compress_string(&log).unwrap() {
             CompressionResult::Compressed { .. } => {}
             other => panic!("expected Compressed, got {other:?}"),
@@ -519,7 +662,7 @@ mod tests {
             text.push_str(&format!("This is sentence number {i} with some content. "));
         }
         text.push_str("ERROR: critical failure at the end.");
-        let c = Compressor::new(512, 10);
+        let c = Compressor::for_test(512, 10);
         match c.compress_string(&text).unwrap() {
             CompressionResult::Compressed { .. } => {}
             other => panic!("expected Compressed, got {other:?}"),
@@ -528,17 +671,17 @@ mod tests {
 
     #[test]
     fn test_token_estimate() {
-        // ASCII: ~4 chars/token
-        assert!(estimate_tokens("hello world this is a test") > 0);
-        // JSON: compact JSON has many ASCII chars
+        // ASCII: token count should be positive
+        assert!(tokenizer::count_tokens("hello world this is a test") > 0);
+        // JSON: compact JSON tokens
         let json = r#"{"key":"value","items":[1,2,3]}"#;
-        let tokens = estimate_tokens(json);
+        let tokens = tokenizer::count_tokens(json);
         assert!(tokens > 0 && tokens < json.len());
     }
 
     #[test]
     fn test_token_validator_rejects_bad_compression() {
-        let c = Compressor::new(10, 5);
+        let c = Compressor::for_test(10, 5);
         // Content below threshold → unchanged
         let result = c.compress_string("short").unwrap();
         assert!(matches!(result, CompressionResult::Unchanged));
@@ -551,15 +694,15 @@ mod tests {
             .collect();
         let json = serde_json::to_string(&items).unwrap();
 
-        let c = Compressor::new(100, 10);
+        let c = Compressor::for_test(100, 10);
         let result = c.compress_string(&json).unwrap();
         // Large JSON array should be compressed AND pass token validation
         match result {
             CompressionResult::Compressed {
                 ref replacement, ..
             } => {
-                let orig = estimate_tokens(&json);
-                let comp = estimate_tokens(replacement);
+                let orig = tokenizer::count_tokens(&json);
+                let comp = tokenizer::count_tokens(replacement);
                 assert!(
                     comp < orig,
                     "compressed tokens ({comp}) < original ({orig})"
@@ -571,14 +714,14 @@ mod tests {
 
     #[test]
     fn test_ccr_retrieve() {
-        let c = Compressor::new(10, 5);
+        let c = Compressor::for_test(10, 5);
         let hash = c.ccr_store.store("test data");
         assert_eq!(c.retrieve(&hash).unwrap(), "test data");
     }
 
     #[test]
     fn test_headroom_dll_integration() {
-        let c = Compressor::new(10, 5);
+        let c = Compressor::for_test(10, 5);
 
         // If DLL is loaded, verify compress + retrieve round-trip
         if c.using_headroom_dll() {

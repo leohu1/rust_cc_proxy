@@ -28,6 +28,8 @@ macro_rules! make_test_app {
             providers: Default::default(),
             dump_dir: None,
             compression_enabled: false,
+            ccr: Default::default(),
+            auth: Default::default(),
             dev_mode: false,
         };
 

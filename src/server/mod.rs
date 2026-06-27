@@ -27,6 +27,7 @@ pub async fn run(config: Config) -> std::io::Result<()> {
 
     let bind_addr = config.server.bind_addr;
     let dev_mode = config.dev_mode;
+    let auth = config.auth.clone();
 
     // Build proxy client
     let proxy_client = ProxyClient::new(
@@ -78,7 +79,7 @@ pub async fn run(config: Config) -> std::io::Result<()> {
 
     // Add compression stage if enabled
     let compressor: Option<Arc<Compressor>> = if config.compression_enabled {
-        let c = Arc::new(Compressor::new(512, 10));
+        let c = Arc::new(Compressor::new(512, 10, config.ccr.clone()));
         pipeline.push(Arc::new(
             crate::compress::pipeline_stage::CompressionStage::new(c.clone()),
         ));
@@ -103,6 +104,7 @@ pub async fn run(config: Config) -> std::io::Result<()> {
     let server = HttpServer::new(move || {
         let app = App::new()
             .app_data(state.clone())
+            .wrap(crate::auth::Auth::new(auth.clone()))
             // Always-on endpoints
             .route("/health", web::get().to(handlers::health))
             .route("/status", web::get().to(handlers::status_handler))
@@ -123,11 +125,14 @@ pub async fn run(config: Config) -> std::io::Result<()> {
             .app_data(web::JsonConfig::default().limit(20 * 1024 * 1024)); // 20MB body limit
 
         // Dev-mode only endpoints
-        if dev_mode {
-            app.route("/metrics", web::get().to(handlers::metrics_handler))
+        let app = if dev_mode {
+            app.route("/v1/metrics", web::get().to(handlers::metrics_handler))
         } else {
             app
-        }
+        };
+
+        // Prometheus metrics — always on (not dev-mode only)
+        app.route("/metrics", web::get().to(handlers::prometheus_handler))
     })
     .bind(bind_addr)?
     .shutdown_timeout(30) // Graceful shutdown: 30s for in-flight requests

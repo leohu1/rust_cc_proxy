@@ -11,11 +11,13 @@ use crate::compress::CompressionResult;
 type CompressFn = unsafe extern "C" fn(*const c_char, u8) -> *mut c_char;
 type RetrieveFn = unsafe extern "C" fn(*const c_char) -> *mut c_char;
 type FreeFn = unsafe extern "C" fn(*mut c_char);
+type CcrStatsFn = unsafe extern "C" fn() -> *mut c_char;
 
 pub struct HeadroomDll {
     compress: CompressFn,
     retrieve: RetrieveFn,
     free: FreeFn,
+    ccr_stats: CcrStatsFn,
 }
 
 unsafe impl Send for HeadroomDll {}
@@ -62,6 +64,18 @@ impl HeadroomDll {
         unsafe { (self.free)(result_ptr) };
         Some(content)
     }
+
+    /// Query the DLL's CCR store statistics.
+    /// Returns parsed JSON on success, `None` on failure.
+    pub fn ccr_stats(&self) -> Option<serde_json::Value> {
+        let result_ptr = unsafe { (self.ccr_stats)() };
+        if result_ptr.is_null() {
+            return None;
+        }
+        let json_str = unsafe { CStr::from_ptr(result_ptr).to_string_lossy().to_string() };
+        unsafe { (self.free)(result_ptr) };
+        serde_json::from_str(&json_str).ok()
+    }
 }
 
 // ── Platform DLL loading ──────────────────────────────────────────
@@ -82,10 +96,12 @@ fn load_platform_dll(path: &Path) -> Option<HeadroomDll> {
     let compress: CompressFn = unsafe { get_proc(handle, "headroom_compress")? };
     let retrieve: RetrieveFn = unsafe { get_proc(handle, "headroom_retrieve")? };
     let free: FreeFn = unsafe { get_proc(handle, "headroom_free")? };
+    let ccr_stats: CcrStatsFn = unsafe { get_proc(handle, "headroom_ccr_stats")? };
     Some(HeadroomDll {
         compress,
         retrieve,
         free,
+        ccr_stats,
     })
 }
 
@@ -122,10 +138,12 @@ fn load_platform_dll(path: &Path) -> Option<HeadroomDll> {
         let compress = get_sym(handle, "headroom_compress")?;
         let retrieve = get_sym(handle, "headroom_retrieve")?;
         let free = get_sym(handle, "headroom_free")?;
+        let ccr_stats = get_sym(handle, "headroom_ccr_stats")?;
         Some(HeadroomDll {
             compress,
             retrieve,
             free,
+            ccr_stats,
         })
     }
 }

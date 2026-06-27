@@ -7,6 +7,7 @@
 //! 4. Keeping top-scored lines with context windows
 
 use crate::compress::ccr;
+use crate::compress::signals::{self, ImportanceContext};
 use crate::compress::CompressionResult;
 
 pub struct LogCompressor {
@@ -158,15 +159,14 @@ fn detect_format(content: &str) -> LogFormat {
 fn score_line(line: &str, _format: &LogFormat) -> i32 {
     let lower = line.to_lowercase();
 
-    // Error/fail lines are highest priority
-    if lower.contains("error") || lower.contains("fail") || lower.contains("panic") {
-        if lower.contains("error[") || lower.contains("traceback") || lower.contains("exception") {
-            return 100;
-        }
-        return 80;
-    }
+    // Base score from unified keyword detector
+    let signal = signals::score_line(line, ImportanceContext::Log);
+    let base: i32 = (signal * 100.0) as i32;
 
-    // Stack traces
+    // Format-specific structural boosts
+    let mut bonus = 0i32;
+
+    // Stack traces — file references
     if line.starts_with("  at ")
         || line.starts_with("    at ")
         || line.contains(".rs:")
@@ -174,30 +174,23 @@ fn score_line(line: &str, _format: &LogFormat) -> i32 {
         || line.contains(".ts:")
         || line.contains(".js:")
     {
-        return 50;
+        bonus += 50;
     }
 
-    // Warnings
-    if lower.contains("warn") || lower.contains("warning") {
-        return 30;
-    }
-
-    // Summary lines
+    // Test/build result summaries
     if lower.starts_with("test result:")
         || lower.starts_with("test summary:")
-        || lower.contains("passed")
-        || lower.contains("finished")
         || lower.starts_with("build finished")
     {
-        return 20;
+        bonus += 20;
     }
 
-    // Info
+    // Info lines get a small bump
     if lower.starts_with("info") || lower.starts_with("compiling") {
-        return 5;
+        bonus += 5;
     }
 
-    1
+    (base + bonus).max(1)
 }
 
 #[cfg(test)]
@@ -219,22 +212,22 @@ mod tests {
 
     #[test]
     fn test_score_error_line() {
-        assert_eq!(
-            score_line("error: connection refused", &LogFormat::Generic),
-            80
+        // error keywords → signals priority 0.9 → base 90
+        assert!(
+            score_line("error: connection refused", &LogFormat::Generic) >= 80,
+            "error lines should score high"
         );
-        assert_eq!(
-            score_line("thread panicked at src/main.rs:42", &LogFormat::Generic),
-            80
+        assert!(
+            score_line("thread panicked at src/main.rs:42", &LogFormat::Generic) >= 80,
+            "panic lines should score high"
         );
     }
 
     #[test]
     fn test_score_warning_line() {
-        assert_eq!(
-            score_line("warning: unused import", &LogFormat::Generic),
-            30
-        );
+        // warning keywords → signals priority 0.6 → base 60
+        let score = score_line("warning: unused import", &LogFormat::Generic);
+        assert!(score >= 50, "warning lines should score moderately, got {score}");
     }
 
     #[test]

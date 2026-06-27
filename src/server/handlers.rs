@@ -5,6 +5,7 @@ use reqwest::header::HeaderMap;
 use serde_json::Value;
 
 use crate::error::AppError;
+use crate::metrics;
 use crate::monitor::TokenMonitor;
 use crate::protocol::models::ModelListResponse;
 use crate::proxy::streaming;
@@ -142,9 +143,16 @@ pub async fn balance_handler(state: web::Data<AppState>) -> HttpResponse {
     }))
 }
 
-/// GET /metrics — dev-mode monitoring endpoint.
+/// GET /metrics — dev-mode monitoring endpoint (JSON).
 pub async fn metrics_handler(state: web::Data<AppState>) -> HttpResponse {
     HttpResponse::Ok().json(state.token_monitor.metrics_response())
+}
+
+/// GET /metrics — Prometheus text format (always on).
+pub async fn prometheus_handler() -> HttpResponse {
+    HttpResponse::Ok()
+        .content_type("text/plain; charset=utf-8")
+        .body(metrics::gather())
 }
 
 /// POST /v1/retrieve — CCR content retrieval.
@@ -357,6 +365,10 @@ pub async fn messages_handler(
                 upstream_latency.as_millis(),
             );
         }
+
+        // Record Prometheus metrics
+        metrics::record_request(start.elapsed().as_secs_f64());
+        metrics::record_tokens(input_tokens, output_tokens);
 
         Ok(HttpResponse::Ok().json(response_body))
     }

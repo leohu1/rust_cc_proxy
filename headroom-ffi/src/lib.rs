@@ -74,7 +74,7 @@ fn str_to_cstring(s: &str) -> *mut c_char {
 
 // ── Compression ───────────────────────────────────────────────────
 
-/// Compress content. `content_type`: 0=JSON, 1=diff, 2=log, 3=text.
+/// Compress content. `content_type`: 0=JSON, 1=diff, 2=log, 3=text, 4=search.
 /// Returns a JSON string: {"status":"compressed","replacement":"...","original_bytes":N,...}
 /// or {"status":"unchanged"} or {"status":"error","message":"..."}.
 /// Caller must free with `headroom_free`.
@@ -86,6 +86,7 @@ pub extern "C" fn headroom_compress(content: *const c_char, content_type: u8) ->
         1 => compress_diff(&input),
         2 => compress_log(&input),
         3 => compress_text(&input),
+        4 => compress_search(&input),
         _ => serde_json::json!({"status": "error", "message": "unknown content_type"}).to_string(),
     };
     str_to_cstring(&result)
@@ -311,6 +312,91 @@ fn compress_text(input: &str) -> String {
         "compressed_bytes": compressed_bytes,
         "ccr_hash": ccr_hash,
     }).to_string()
+}
+
+// ── Search compressor (content_type=4) ─────────────────────────────
+
+fn compress_search(input: &str) -> String {
+    let lines: Vec<&str> = input.lines().collect();
+    if lines.len() < 20 {
+        return serde_json::json!({"status":"unchanged"}).to_string();
+    }
+    let original_bytes = input.len();
+
+    // Group by file
+    let mut file_groups: std::collections::BTreeMap<String, Vec<(u64, &str)>> =
+        std::collections::BTreeMap::new();
+    let mut match_count = 0usize;
+    for line in &lines {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        // Quick parse: find first `:digit:` pattern
+        if let Some(rest) = find_file_line(line) {
+            let file = &line[..line.len() - rest.len() - 1];
+            if let Some((num_str, content)) = rest.split_once(':') {
+                if let Ok(line_num) = num_str.parse::<u64>() {
+                    file_groups
+                        .entry(file.to_string())
+                        .or_default()
+                        .push((line_num, content.trim()));
+                    match_count += 1;
+                }
+            }
+        }
+    }
+
+    if file_groups.is_empty() {
+        return serde_json::json!({"status":"unchanged"}).to_string();
+    }
+
+    // Keep top 10 files, top 3 matches each
+    let mut file_list: Vec<(String, Vec<(u64, &str)>)> = file_groups.into_iter().collect();
+    file_list.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+    file_list.truncate(10);
+
+    let mut compressed = String::new();
+    let mut kept = 0usize;
+    for (file, matches) in &file_list {
+        let take = 3.min(matches.len());
+        for (line_num, content) in matches.iter().take(take) {
+            compressed.push_str(&format!("{}:{}:{}\n", file, line_num, content));
+            kept += 1;
+        }
+        if matches.len() > take {
+            compressed.push_str(&format!("{}: … and {} more matches …\n", file, matches.len() - take));
+        }
+    }
+
+    let compressed_bytes = compressed.len();
+    if compressed_bytes >= original_bytes * 8 / 10 {
+        return serde_json::json!({"status":"unchanged"}).to_string();
+    }
+
+    let ccr_hash = CCR.lock().unwrap().store(input);
+    serde_json::json!({
+        "status": "compressed",
+        "replacement": format!("/* Search {}/{} matches. <<ccr:{}>> */\n{}", kept, match_count, ccr_hash, compressed),
+        "original_bytes": original_bytes,
+        "compressed_bytes": compressed_bytes,
+        "ccr_hash": ccr_hash,
+    }).to_string()
+}
+
+/// Find `:digits:` separator in a line, returning the rest after the file path.
+fn find_file_line(line: &str) -> Option<&str> {
+    let bytes = line.as_bytes();
+    for i in 0..bytes.len().saturating_sub(2) {
+        if bytes[i] == b':' && bytes[i + 1].is_ascii_digit() {
+            // Look for the next `:` after digits
+            let rest = &bytes[i + 1..];
+            if let Some(j) = rest.iter().position(|&b| b == b':') {
+                return Some(&line[i + 1 + j..]);
+            }
+        }
+    }
+    None
 }
 
 // ── CCR retrieval ──────────────────────────────────────────────────

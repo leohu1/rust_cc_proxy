@@ -5,6 +5,7 @@
 //! or concatenated text tool outputs.
 
 use crate::compress::ccr;
+use crate::compress::signals::{self, ImportanceContext};
 use crate::compress::CompressionResult;
 
 pub struct TextCompressor {
@@ -110,37 +111,19 @@ fn split_sentences(text: &str) -> Vec<String> {
     sentences
 }
 
-/// Score a sentence for importance.
+/// Score a sentence for importance. Uses unified keyword detector
+/// with positional recency bonus.
 fn score_sentence(sentence: &str, position: usize, total: usize) -> f64 {
-    let mut score = 0.0;
+    let base = signals::score_line(sentence, ImportanceContext::Text) as f64;
 
-    // Recency bonus: later sentences more important (common in tool outputs)
-    score += (position as f64 / total as f64) * 0.3;
+    // Recency bonus: later sentences often more important in tool outputs
+    let recency = (position as f64 / total.max(1) as f64) * 0.25;
 
-    // Salience: error keywords, digits, caps, identifiers
-    let lower = sentence.to_lowercase();
-    if lower.contains("error") || lower.contains("fail") || lower.contains("panic") {
-        score += 0.5;
-    }
-    if lower.contains("warn") || lower.contains("warning") {
-        score += 0.3;
-    }
-    if lower.contains("result") || lower.contains("total") || lower.contains("summary") {
-        score += 0.3;
-    }
-
-    // Digit density: lines with numbers often carry data
+    // Digit density bonus
     let digit_count = sentence.chars().filter(|c| c.is_ascii_digit()).count();
-    score += (digit_count as f64 / sentence.len().max(1) as f64) * 0.2;
+    let digit_bonus = (digit_count as f64 / sentence.len().max(1) as f64) * 0.15;
 
-    // ALLCAPS words signal importance
-    let caps_count = sentence
-        .split_whitespace()
-        .filter(|w| w.len() > 1 && w.chars().all(|c| c.is_uppercase()))
-        .count();
-    score += (caps_count as f64) * 0.1;
-
-    score.min(1.0)
+    (base + recency + digit_bonus).min(1.0)
 }
 
 #[cfg(test)]

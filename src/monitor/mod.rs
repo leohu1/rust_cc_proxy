@@ -92,11 +92,10 @@ impl TokenMonitor {
     }
 
     /// Estimate input tokens from a serialized request body.
-    /// Rough heuristic: ~4 characters per token for English text.
+    /// Uses tiktoken-rs when available; falls back to char-based heuristic.
     pub fn estimate_input_tokens(body: &serde_json::Value) -> u64 {
-        serde_json::to_string(body)
-            .map(|s| (s.len() as u64).saturating_div(4))
-            .unwrap_or(0)
+        let text = serde_json::to_string(body).unwrap_or_default();
+        crate::compress::tokenizer::count_tokens(&text) as u64
     }
 
     /// Parse token usage from an Anthropic-format response JSON (non-streaming).

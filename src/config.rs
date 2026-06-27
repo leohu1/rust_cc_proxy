@@ -10,8 +10,37 @@ pub struct Config {
     pub providers: HashMap<String, ProviderConfig>,
     pub dump_dir: Option<PathBuf>,
     pub compression_enabled: bool,
+    /// CCR storage backend configuration.
+    pub ccr: CcrConfig,
+    /// API key authentication configuration.
+    pub auth: crate::auth::AuthConfig,
     /// Enable verbose dev-mode logging (request/response details, timing, token usage).
     pub dev_mode: bool,
+}
+
+/// CCR (Compress-Cache-Retrieve) storage configuration.
+#[derive(Debug, Clone)]
+pub struct CcrConfig {
+    /// Backend type: "memory" (default) or "sqlite".
+    pub backend: String,
+    /// Path to SQLite database file (only used when backend = "sqlite").
+    pub sqlite_path: Option<String>,
+    /// TTL in seconds for stored entries (0 = never expire). Default: 1800 (30 min).
+    pub ttl_seconds: u64,
+    /// Background purge interval in seconds (SQLite only). Default: 300 (5 min).
+    /// 0 disables background purge.
+    pub purge_interval_secs: u64,
+}
+
+impl Default for CcrConfig {
+    fn default() -> Self {
+        CcrConfig {
+            backend: "memory".to_string(),
+            sqlite_path: None,
+            ttl_seconds: 1800,
+            purge_interval_secs: 300,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -113,6 +142,36 @@ impl Config {
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
 
+        let ccr = CcrConfig {
+            backend: env_or("CCR_BACKEND", "memory"),
+            sqlite_path: std::env::var("CCR_SQLITE_PATH")
+                .ok()
+                .filter(|s| !s.is_empty()),
+            ttl_seconds: env_or("CCR_TTL_SECONDS", "1800").parse().unwrap_or(1800),
+            purge_interval_secs: env_or("CCR_PURGE_INTERVAL_SECONDS", "300").parse().unwrap_or(300),
+        };
+
+        // Auth: parse comma-separated API tokens from PROXY_AUTH_TOKENS
+        let auth_tokens: Vec<String> = std::env::var("PROXY_AUTH_TOKENS")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .map(|s| {
+                s.split(',')
+                    .map(|t| t.trim().to_string())
+                    .filter(|t| !t.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let auth = crate::auth::AuthConfig {
+            tokens: auth_tokens,
+        };
+        if auth.is_enabled() {
+            tracing::info!(
+                "Auth ENABLED ({} token(s) configured)",
+                auth.tokens.len()
+            );
+        }
+
         let dev_mode = std::env::var("PROXY_DEV_MODE")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
@@ -123,6 +182,8 @@ impl Config {
             providers,
             dump_dir,
             compression_enabled,
+            ccr,
+            auth,
             dev_mode,
         })
     }
@@ -186,6 +247,11 @@ mod tests {
             "PROXY_POOL_MAX",
             "PROXY_DUMP_DIR",
             "COMPRESSION_ENABLED",
+            "CCR_BACKEND",
+            "CCR_SQLITE_PATH",
+            "CCR_TTL_SECONDS",
+            "CCR_PURGE_INTERVAL_SECONDS",
+            "PROXY_AUTH_TOKENS",
             "DEEPSEEK_UPSTREAM",
             "DEEPSEEK_API_KEY",
             "DEEPSEEK_DEFAULT_MODEL",

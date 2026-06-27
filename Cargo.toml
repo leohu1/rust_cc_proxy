@@ -21,6 +21,10 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "2"
 bytes = "1"
+rusqlite = { version = "0.31", features = ["bundled"] }
+tiktoken-rs = "0.6"
+lru = "0.12"
+prometheus = "0.13"
 
 [target.'cfg(not(windows))'.dependencies]
 libc = "0.2"

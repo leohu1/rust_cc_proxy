@@ -1,6 +1,8 @@
+pub mod auth;
 pub mod compress;
 pub mod config;
 pub mod error;
+pub mod metrics;
 pub mod monitor;
 pub mod pipeline;
 pub mod protocol;
