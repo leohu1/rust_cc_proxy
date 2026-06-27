@@ -78,9 +78,9 @@ jobs:
 
           ARCHIVE="rust_cc_proxy-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.ext }}"
           if [ "${{ matrix.ext }}" = "zip" ]; then
-            7z a "../$ARCHIVE" *
+            7z a "./$ARCHIVE" *
           else
-            tar -czf "../$ARCHIVE" *
+            tar -czf "./$ARCHIVE" *
           fi
           echo "archive=$ARCHIVE" >> $GITHUB_ENV
 
